@@ -1,0 +1,19 @@
+{
+  "name": "@mita/engine",
+  "version": "0.0.0",
+  "private": true,
+  "license": "AGPL-3.0-only",
+  "type": "module",
+  "exports": {
+    ".": "./index.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@mita/shared": "workspace:*"
+  },
+  "devDependencies": {
+    "typescript": "~6.0.3"
+  }
+}

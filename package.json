@@ -1,0 +1,56 @@
+{
+  "name": "mita",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Mita: a light, honest internet speed test for Nigeria.",
+  "license": "AGPL-3.0-only",
+  "type": "module",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/kleenpulse/kilomita.git"
+  },
+  "packageManager": "bun@1.4.4",
+  "engines": {
+    "node": ">=20.9"
+  },
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "trustedDependencies": [],
+  "scripts": {
+    "dev": "bun --filter @mita/web dev",
+    "build": "bun --filter @mita/web build",
+    "start": "bun --filter @mita/web start",
+    "typecheck": "tsc --noEmit -p . && bun --filter '@mita/*' typecheck",
+    "lint": "eslint .",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
+    "test": "vitest run",
+    "test:e2e": "bun --filter @mita/web test:e2e",
+    "licenses": "bun scripts/check-licenses.ts",
+    "tripwire": "bun scripts/tripwire.ts",
+    "prepare": "husky"
+  },
+  "lint-staged": {
+    "*.{ts,tsx}": [
+      "eslint --fix",
+      "prettier --write"
+    ],
+    "*.{json,md,css,yml,yaml}": "prettier --write"
+  },
+  "devDependencies": {
+    "@types/bun": "^1.4.4",
+    "@types/node": "^24",
+    "eslint": "^10.14.0",
+    "eslint-config-next": "^16.4.3",
+    "eslint-config-prettier": "^10.1.8",
+    "husky": "^9.1.7",
+    "jiti": "^2.7.0",
+    "lint-staged": "^17.6.0",
+    "prettier": "^3.9.10",
+    "typescript": "~6.0.3",
+    "typescript-eslint": "^8.72.1",
+    "vitest": "^5.0.5"
+  }
+}
