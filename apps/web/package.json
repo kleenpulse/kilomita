@@ -1,5 +1,5 @@
 {
-  "name": "@mita/web",
+  "name": "@kilomita/web",
   "version": "0.0.0",
   "private": true,
   "license": "AGPL-3.0-only",
@@ -13,8 +13,8 @@
     "playwright:install": "playwright install --with-deps chromium"
   },
   "dependencies": {
-    "@mita/engine": "workspace:*",
-    "@mita/shared": "workspace:*",
+    "@kilomita/engine": "workspace:*",
+    "@kilomita/shared": "workspace:*",
     "next": "^16.4.3",
     "react": "^19.3.1",
     "react-dom": "^19.3.1"

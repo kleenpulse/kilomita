@@ -14,7 +14,7 @@ We aim to acknowledge reports within 7 days and will keep you updated until the 
 
 ## Scope
 
-In scope: the code in this repository and any official Mita deployment.
+In scope: the code in this repository and any official KiloMita deployment.
 
 Of particular interest:
 
@@ -24,4 +24,4 @@ Of particular interest:
 
 ## Supported versions
 
-Mita is pre-1.0. Only the latest commit on `main` receives security fixes.
+KiloMita is pre-1.0. Only the latest commit on `main` receives security fixes.

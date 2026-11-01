@@ -1,4 +1,4 @@
-# Contributing to Mita
+# Contributing to KiloMita
 
 Thanks for helping make internet speed in Nigeria easier to see and compare.
 
@@ -32,7 +32,7 @@ A pre-commit hook (Husky + lint-staged) formats and lints staged files for you.
 
 ## Licensing of contributions
 
-Mita is licensed under the [GNU AGPL v3.0 only](LICENSE). By contributing, you agree that your contribution is licensed under the same terms (inbound = outbound). There is no CLA.
+KiloMita is licensed under the [GNU AGPL v3.0 only](LICENSE). By contributing, you agree that your contribution is licensed under the same terms (inbound = outbound). There is no CLA.
 
 ### Developer Certificate of Origin (DCO)
 

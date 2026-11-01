@@ -1,6 +1,6 @@
 ---
 name: Bug report
-about: Something in Mita is broken or measuring wrong
+about: Something in KiloMita is broken or measuring wrong
 labels: bug
 ---
 

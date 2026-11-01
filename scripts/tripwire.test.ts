@@ -22,7 +22,7 @@ const SHELL = findShell();
 const tempDirs: string[] = [];
 
 function makeTempDir(): string {
-  const dir = mkdtempSync(join(tmpdir(), "mita-tripwire-"));
+  const dir = mkdtempSync(join(tmpdir(), "kilomita-tripwire-"));
   tempDirs.push(dir);
   return dir;
 }

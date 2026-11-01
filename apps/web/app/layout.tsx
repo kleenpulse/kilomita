@@ -1,6 +1,6 @@
 import type { Metadata, Viewport } from "next";
 import type { ReactNode } from "react";
-import { APP_NAME, DESCRIPTION, TAGLINE } from "@mita/shared";
+import { APP_NAME, DESCRIPTION, TAGLINE } from "@kilomita/shared";
 import "./globals.css";
 
 const siteUrl = process.env.NEXT_PUBLIC_SITE_URL ?? "http://localhost:3000";

@@ -20,11 +20,11 @@
       },
     },
     "apps/web": {
-      "name": "@mita/web",
+      "name": "@kilomita/web",
       "version": "0.0.0",
       "dependencies": {
-        "@mita/engine": "workspace:*",
-        "@mita/shared": "workspace:*",
+        "@kilomita/engine": "workspace:*",
+        "@kilomita/shared": "workspace:*",
         "next": "^16.4.3",
         "react": "^19.3.1",
         "react-dom": "^19.3.1",
@@ -40,17 +40,17 @@
       },
     },
     "packages/engine": {
-      "name": "@mita/engine",
+      "name": "@kilomita/engine",
       "version": "0.0.0",
       "dependencies": {
-        "@mita/shared": "workspace:*",
+        "@kilomita/shared": "workspace:*",
       },
       "devDependencies": {
         "typescript": "~6.0.3",
       },
     },
     "packages/shared": {
-      "name": "@mita/shared",
+      "name": "@kilomita/shared",
       "version": "0.0.0",
       "dependencies": {
         "zod": "^4.6.7",
@@ -194,11 +194,11 @@
 
     "@keyv/serialize": ["@keyv/serialize@1.1.1", "", {}, "sha512-dXn3FZhPv0US+7dtJsIi2R+c7qWYiReoEh5zUntWCf4oSpMNib8FDhSoed6m3QyZdx5hK7iLFkYk3rNxwt8vTA=="],
 
-    "@mita/engine": ["@mita/engine@workspace:packages/engine"],
+    "@kilomita/engine": ["@kilomita/engine@workspace:packages/engine"],
 
-    "@mita/shared": ["@mita/shared@workspace:packages/shared"],
+    "@kilomita/shared": ["@kilomita/shared@workspace:packages/shared"],
 
-    "@mita/web": ["@mita/web@workspace:apps/web"],
+    "@kilomita/web": ["@kilomita/web@workspace:apps/web"],
 
     "@next/env": ["@next/env@16.4.3", "", {}, "sha512-a7tz1QCcWWkwC/rPJcPMJk/UNRu9CFhDd3OHYE5hddbJrs8BqRTalxI6GlKCWEGzRLHN+S/B7a4PAHCtm25aBQ=="],
 

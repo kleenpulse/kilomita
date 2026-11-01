@@ -1,4 +1,4 @@
-import { APP_NAME, SOURCE_URL, TAGLINE } from "@mita/shared";
+import { APP_NAME, SOURCE_URL, TAGLINE } from "@kilomita/shared";
 
 export default function HomePage() {
   return (

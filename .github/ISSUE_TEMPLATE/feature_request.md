@@ -1,6 +1,6 @@
 ---
 name: Feature request
-about: Suggest an idea for Mita
+about: Suggest an idea for KiloMita
 labels: enhancement
 ---
 

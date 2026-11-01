@@ -1,5 +1,5 @@
 {
-  "name": "@mita/engine",
+  "name": "@kilomita/engine",
   "version": "0.0.0",
   "private": true,
   "license": "AGPL-3.0-only",
@@ -11,7 +11,7 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "@mita/shared": "workspace:*"
+    "@kilomita/shared": "workspace:*"
   },
   "devDependencies": {
     "typescript": "~6.0.3"

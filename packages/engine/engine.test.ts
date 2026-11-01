@@ -1,4 +1,4 @@
-import { SpeedTestResultSchema } from "@mita/shared";
+import { SpeedTestResultSchema } from "@kilomita/shared";
 import { describe, expect, it } from "vitest";
 import { ENGINE_VERSION } from "./index";
 

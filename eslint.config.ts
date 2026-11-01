@@ -49,8 +49,8 @@ export default defineConfig(
       "no-restricted-imports": [
         "error",
         {
-          paths: ["react", "react-dom", "next", "@mita/web"],
-          patterns: ["react/*", "react-dom/*", "next/*", "@mita/web/*"],
+          paths: ["react", "react-dom", "next", "@kilomita/web"],
+          patterns: ["react/*", "react-dom/*", "next/*", "@kilomita/web/*"],
         },
       ],
     },

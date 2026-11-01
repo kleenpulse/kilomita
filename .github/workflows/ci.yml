@@ -67,7 +67,7 @@ jobs:
       - run: bun run format:check
       - run: bun run test
       - run: bun run build
-      - run: bun --filter @mita/web playwright:install
+      - run: bun --filter @kilomita/web playwright:install
       - run: bun run test:e2e
       - if: failure()
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2

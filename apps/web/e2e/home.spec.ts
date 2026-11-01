@@ -1,4 +1,4 @@
-import { APP_NAME, SOURCE_URL } from "@mita/shared";
+import { APP_NAME, SOURCE_URL } from "@kilomita/shared";
 import { expect, test } from "@playwright/test";
 
 test("home page renders the brand and links to the source", async ({ page }) => {

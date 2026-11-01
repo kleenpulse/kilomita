@@ -1,7 +1,7 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
-  transpilePackages: ["@mita/shared", "@mita/engine"],
+  transpilePackages: ["@kilomita/shared", "@kilomita/engine"],
   poweredByHeader: false,
 };
 

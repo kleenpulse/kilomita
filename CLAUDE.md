@@ -1,19 +1,19 @@
-# Mita: agent and maintainer guide
+# KiloMita: agent and maintainer guide
 
-Mita ("How far your network speed?") is a fast.com-style internet speed test for Nigerian users, with an aggregated, anonymised per-ISP/per-state dashboard. The full requirements are in `mita-frd.md`. That file calls the app "NaijaSpeed" in one place; the brand section wins, so the name is **Mita** and lives only in `packages/shared/brand.ts`.
+KiloMita ("How far your network speed?") is a fast.com-style internet speed test for Nigerian users, with an aggregated, anonymised per-ISP/per-state dashboard. The full requirements are in `mita-frd.md`. That file calls the app "Mita" in its brand section and "NaijaSpeed" in one other place. On 2026-11-01 the maintainer renamed the product to **KiloMita**, with package scope `@kilomita/*`. The FRD is left as written, so read its "Mita" as KiloMita. The display name lives only in `packages/shared/brand.ts`.
 
 ## Phase status
 
-| Phase | Scope                                              | Status                      |
-| ----- | -------------------------------------------------- | --------------------------- |
-| 0     | Foundation: monorepo, tooling, CI, shared schemas  | **Done, awaiting approval** |
-| 1     | Measurement engine (`packages/engine`)             | Not started                 |
-| 2     | Test UI (`apps/web`)                               | Not started                 |
-| 3     | ISP and location detection, consent                | Not started                 |
-| 4     | Results API and storage                            | Not started                 |
-| 5     | Public insights dashboard                          | Not started                 |
-| 6     | Own test servers (`apps/server`), share cards, PWA | Not started                 |
-| 7     | Production hardening                               | Not started                 |
+| Phase | Scope                                              | Status             |
+| ----- | -------------------------------------------------- | ------------------ |
+| 0     | Foundation: monorepo, tooling, CI, shared schemas  | **Done** (295d397) |
+| 1     | Measurement engine (`packages/engine`)             | Not started        |
+| 2     | Test UI (`apps/web`)                               | Not started        |
+| 3     | ISP and location detection, consent                | Not started        |
+| 4     | Results API and storage                            | Not started        |
+| 5     | Public insights dashboard                          | Not started        |
+| 6     | Own test servers (`apps/server`), share cards, PWA | Not started        |
+| 7     | Production hardening                               | Not started        |
 
 Work one phase at a time. Each phase ends with typecheck, lint and tests passing, a summary, known limitations and manual verification steps. Then stop for the maintainer's approval.
 
@@ -23,11 +23,11 @@ Work one phase at a time. Each phase ends with typecheck, lint and tests passing
 bun install                              # install (isolated linker, see bunfig.toml)
 bun run dev                              # web app on http://localhost:3000
 bun run build / bun run start            # production build / serve
-bun run typecheck                        # root tsconfig + every @mita/* workspace
+bun run typecheck                        # root tsconfig + every @kilomita/* workspace
 bun run lint                             # ESLint (single root config)
 bun run format / bun run format:check    # Prettier
 bun run test                             # Vitest (projects: packages/*, scripts)
-bun --filter @mita/web playwright:install && bun run test:e2e
+bun --filter @kilomita/web playwright:install && bun run test:e2e
 bun run licenses                         # dependency licence check
 bun run tripwire                         # malware-marker scan (exit 0 clean, 1 found, 2 scan error)
 ```
@@ -35,9 +35,9 @@ bun run tripwire                         # malware-marker scan (exit 0 clean, 1 
 ## Architecture
 
 ```
-apps/web          @mita/web     Next.js 16 App Router, Tailwind v4, React 19. No src/, no pages/. @/* → ./*
-packages/shared   @mita/shared  Zod schemas + constants (brand, 36 states + FCT, ISP list). Depends on zod only.
-packages/engine   @mita/engine  Framework-agnostic engine. Phase 0: ENGINE_VERSION stub only.
+apps/web          @kilomita/web     Next.js 16 App Router, Tailwind v4, React 19. No src/, no pages/. @/* → ./*
+packages/shared   @kilomita/shared  Zod schemas + constants (brand, 36 states + FCT, ISP list). Depends on zod only.
+packages/engine   @kilomita/engine  Framework-agnostic engine. Phase 0: ENGINE_VERSION stub only.
 scripts/          check-licenses.ts (run by Bun), tripwire.sh (POSIX sh)
 ```
 
@@ -105,15 +105,14 @@ Patterns are written with character classes so the script never matches itself. 
   - single root ESLint config, Prettier, Husky + lint-staged
   - Vitest and Playwright, GitHub Actions CI (tripwire, DCO, check)
   - licence checker, tripwire
-  - `@mita/shared` schemas and constants, `@mita/engine` stub
+  - `@kilomita/shared` schemas and constants, `@kilomita/engine` stub
   - a minimal Next.js home page
   - FOSS docs
 - **Known limitations:**
   - no LGA list, no ASNs
   - the engine is a stub, and the Start button is disabled
-  - the GitHub repo `kleenpulse/kilomita` is empty until the first push, so the footer source link shows an empty repo until then
   - licence-check results differ by platform
 - **Manual steps for the maintainer:**
-  1. ~~create the GitHub repo~~ done: `kleenpulse/kilomita`. The repo name differs from the product name, which stays Mita.
-  2. enable private vulnerability reporting (Settings → Code security)
-  3. commit with `git commit -s` and push
+  1. ~~create the GitHub repo~~ done: `kleenpulse/kilomita`.
+  2. ~~enable private vulnerability reporting~~ done
+  3. ~~commit and push~~ done: 295d397 on `main`, CI green
