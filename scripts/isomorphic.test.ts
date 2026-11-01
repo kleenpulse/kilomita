@@ -5,10 +5,33 @@ import { describe, expect, it } from "vitest";
 
 // shared and engine must run in browsers as well as Node. These probes prove both guards hold:
 // the package tsconfig rejects Node APIs at compile time, and the lint preset rejects them too.
-const ISOMORPHIC_PACKAGES = ["shared", "engine"].map((name) => ({
-  name,
-  dir: join(import.meta.dirname, "..", "packages", name),
-}));
+const packageDir = (name: string) => join(import.meta.dirname, "..", "packages", name);
+
+const ISOMORPHIC_PACKAGES = [
+  {
+    name: "shared",
+    dir: packageDir("shared"),
+    portable: "export const ok = JSON.stringify(globalThis.Math.max(1, 2));",
+  },
+  {
+    // The engine gets the WebWorker lib: fetch, streams, abort and timers, but no DOM.
+    name: "engine",
+    dir: packageDir("engine"),
+    portable: [
+      "const controller = new AbortController();",
+      'export const ok = fetch("https://example.com", { signal: controller.signal })',
+      "  .then((response) => response.body?.getReader().read())",
+      "  .then(() => performance.now() + Number(new ReadableStream().locked));",
+    ].join("\n"),
+  },
+];
+
+// The engine may run in a Web Worker (Phase 2), where the DOM doesn't exist.
+const DOM_ACCESS_PROBES = [
+  "export const a = document.title;",
+  "export const b = window.location.href;",
+  'export const c = localStorage.getItem("x");',
+];
 
 const NODE_ACCESS_PROBES = [
   "export const a = process.env.X;",
@@ -42,11 +65,9 @@ function typecheckProbe(packageDir: string, source: string): readonly ts.Diagnos
 describe.each(ISOMORPHIC_PACKAGES)(
   "@kilomita/$name browser safety",
   { timeout: 60_000 },
-  ({ dir }) => {
-    it("type-checks plain portable code", () => {
-      expect(
-        typecheckProbe(dir, "export const ok = JSON.stringify(globalThis.Math.max(1, 2));"),
-      ).toHaveLength(0);
+  ({ dir, portable }) => {
+    it("type-checks portable code", () => {
+      expect(typecheckProbe(dir, portable)).toHaveLength(0);
     });
 
     it.each(NODE_ACCESS_PROBES)("rejects at compile time: %s", (probe) => {
@@ -73,3 +94,47 @@ describe.each(ISOMORPHIC_PACKAGES)(
     });
   },
 );
+
+describe("@kilomita/engine guards", { timeout: 60_000 }, () => {
+  const dir = packageDir("engine");
+
+  it.each(DOM_ACCESS_PROBES)("rejects DOM access at compile time: %s", (probe) => {
+    expect(typecheckProbe(dir, probe).length).toBeGreaterThan(0);
+  });
+
+  it("lints its own rules: real-time timers and value imports from shared", async () => {
+    const eslint = new ESLint({ cwd: dir });
+    const source = [
+      'import { SpeedTestResultSchema } from "@kilomita/shared";',
+      'import { type SpeedTestResult } from "@kilomita/shared";',
+      'import type { NigerianState } from "@kilomita/shared";',
+      "export const a = AbortSignal.timeout(1);",
+      "export const b = AbortSignal.any([]);",
+      "export const keep = [SpeedTestResultSchema] as const;",
+      "export type Keep = [SpeedTestResult, NigerianState];",
+    ].join("\n");
+
+    const [result] = await eslint.lintText(source, { filePath: join(dir, "index.ts") });
+    const flagged = new Map(
+      (result?.messages ?? [])
+        .filter((message) =>
+          [
+            "@typescript-eslint/no-restricted-imports",
+            "@typescript-eslint/no-import-type-side-effects",
+            "no-restricted-properties",
+          ].includes(message.ruleId ?? ""),
+        )
+        .map((message) => [message.line, message.ruleId]),
+    );
+
+    // Line 3, the fully erased `import type`, is allowed.
+    expect(flagged).toEqual(
+      new Map([
+        [1, "@typescript-eslint/no-restricted-imports"],
+        [2, "@typescript-eslint/no-import-type-side-effects"],
+        [4, "no-restricted-properties"],
+        [5, "no-restricted-properties"],
+      ]),
+    );
+  });
+});

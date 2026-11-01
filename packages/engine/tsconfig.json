@@ -1,6 +1,7 @@
 {
   "extends": "@kilomita/typescript-config/base.json",
   "compilerOptions": {
+    "lib": ["ES2023", "WebWorker", "WebWorker.Iterable"],
     "types": []
   },
   "include": ["**/*.ts"],

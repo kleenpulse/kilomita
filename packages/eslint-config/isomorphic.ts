@@ -21,6 +21,7 @@ interface Restrictions {
   paths?: string[];
   patterns?: string[];
   message: string;
+  properties?: { object: string; property: string; message: string }[];
 }
 
 // For code shared by the browser and Node. The package's own tsconfig.json has `types: []`, so
@@ -48,6 +49,7 @@ export function isomorphic(tsconfigRootDir: string, extra?: Restrictions) {
           ...GLOBAL_OBJECTS.flatMap((object) =>
             NODE_GLOBAL_NAMES.map((property) => ({ object, property, message: NODE_ONLY })),
           ),
+          ...(extra?.properties ?? []),
         ],
         "no-restricted-imports": [
           "error",
