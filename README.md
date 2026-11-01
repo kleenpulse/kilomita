@@ -37,11 +37,15 @@ bun run dev          # http://localhost:3000
 
 ## Repository layout
 
+A [Turborepo](https://turborepo.com) monorepo on Bun workspaces. Workspace tasks (`build`, `typecheck`, `lint`, `test`, `test:e2e`) run through `turbo`, which caches results and only reruns what changed.
+
 ```
-apps/web          Next.js App Router site (@kilomita/web)
-packages/shared   Zod schemas, types and constants: states, ISPs, brand (@kilomita/shared)
-packages/engine   Framework-agnostic speed test engine (@kilomita/engine)
-scripts           Repo tooling (licence check, tripwire)
+apps/web                    Next.js App Router site (@kilomita/web)
+packages/shared             Zod schemas, types and constants: states, ISPs, brand (@kilomita/shared)
+packages/engine             Framework-agnostic speed test engine (@kilomita/engine)
+packages/eslint-config      Shared ESLint presets (@kilomita/eslint-config)
+packages/typescript-config  Shared tsconfig presets (@kilomita/typescript-config)
+scripts                     Repo tooling: licence check, tripwire (@kilomita/scripts)
 ```
 
 ## Privacy

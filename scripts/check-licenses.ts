@@ -92,7 +92,7 @@ export function storeEntryToName(entry: string): string | undefined {
 }
 
 function collectManifests(): string[] {
-  const manifests: string[] = [join(ROOT, "package.json")];
+  const manifests: string[] = [join(ROOT, "package.json"), join(ROOT, "scripts", "package.json")];
   if (existsSync(STORE)) {
     for (const entry of readdirSync(STORE)) {
       const name = storeEntryToName(entry);

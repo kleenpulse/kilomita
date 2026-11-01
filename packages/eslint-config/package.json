@@ -1,0 +1,28 @@
+{
+  "name": "@kilomita/eslint-config",
+  "version": "0.0.0",
+  "private": true,
+  "license": "AGPL-3.0-only",
+  "type": "module",
+  "exports": {
+    "./base": "./base.ts",
+    "./isomorphic": "./isomorphic.ts",
+    "./next": "./next.ts"
+  },
+  "scripts": {
+    "lint": "eslint .",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "eslint-config-next": "^16.4.3",
+    "eslint-config-prettier": "^10.1.8",
+    "typescript-eslint": "^8.72.1"
+  },
+  "devDependencies": {
+    "@kilomita/typescript-config": "workspace:*",
+    "@types/node": "^24",
+    "eslint": "^10.14.0",
+    "jiti": "^2.7.0",
+    "typescript": "~6.0.3"
+  }
+}

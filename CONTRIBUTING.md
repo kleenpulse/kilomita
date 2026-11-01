@@ -19,9 +19,13 @@ bun run typecheck && bun run lint && bun run format:check && bun run test
 
 A pre-commit hook (Husky + lint-staged) formats and lints staged files for you.
 
+Tasks run through [Turborepo](https://turborepo.com). Turbo sends anonymous usage telemetry by default; to opt out, run `bun x turbo telemetry disable` once.
+
 ## Conventions
 
 - TypeScript only. No JavaScript files anywhere in the repo, including config files.
+- Each workspace has its own `eslint.config.ts` and `tsconfig.json` built on the shared presets in `packages/eslint-config` and `packages/typescript-config`, plus `lint` and `typecheck` scripts (and `test` if it has tests). Turbo silently skips a workspace without them.
+- If code reads a new environment variable, declare it on the task in `turbo.json`. Turbo hides undeclared variables from tasks.
 - No `src/` directories. Next.js uses the App Router only (`apps/web/app/`), never `pages/`.
 - `packages/engine` must stay framework-agnostic: no React, React DOM or Next.js imports. ESLint enforces this.
 - Keep the product name in `packages/shared/brand.ts`. Do not hard-code it elsewhere.

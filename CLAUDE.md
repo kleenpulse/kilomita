@@ -21,13 +21,13 @@ Work one phase at a time. Each phase ends with typecheck, lint and tests passing
 
 ```sh
 bun install                              # install (isolated linker, see bunfig.toml)
-bun run dev                              # web app on http://localhost:3000
-bun run build / bun run start            # production build / serve
-bun run typecheck                        # root tsconfig + every @kilomita/* workspace
-bun run lint                             # ESLint (single root config)
-bun run format / bun run format:check    # Prettier
-bun run test                             # Vitest (projects: packages/*, scripts)
-bun --filter @kilomita/web playwright:install && bun run test:e2e
+bun run dev                              # turbo: web app on http://localhost:3000
+bun run build / bun run start            # turbo build / serve the build
+bun run typecheck                        # turbo: tsc in every workspace
+bun run lint                             # turbo: ESLint in every workspace (errors fail)
+bun run format / bun run format:check    # Prettier, repo-wide (not a turbo task)
+bun run test                             # turbo: Vitest in shared, engine, scripts
+bun --filter @kilomita/web playwright:install && bun run test:e2e   # turbo, builds first
 bun run licenses                         # dependency licence check
 bun run tripwire                         # malware-marker scan (exit 0 clean, 1 found, 2 scan error)
 ```
@@ -35,10 +35,12 @@ bun run tripwire                         # malware-marker scan (exit 0 clean, 1 
 ## Architecture
 
 ```
-apps/web          @kilomita/web     Next.js 16 App Router, Tailwind v4, React 19. No src/, no pages/. @/* → ./*
-packages/shared   @kilomita/shared  Zod schemas + constants (brand, 36 states + FCT, ISP list). Depends on zod only.
-packages/engine   @kilomita/engine  Framework-agnostic engine. Phase 0: ENGINE_VERSION stub only.
-scripts/          check-licenses.ts (run by Bun), tripwire.sh (POSIX sh)
+apps/web                    @kilomita/web                Next.js 16 App Router, Tailwind v4, React 19. No src/, no pages/. @/* → ./*
+packages/shared             @kilomita/shared             Zod schemas + constants (brand, 36 states + FCT, ISP list). Depends on zod only.
+packages/engine             @kilomita/engine             Framework-agnostic engine. Phase 0: ENGINE_VERSION stub only.
+packages/eslint-config      @kilomita/eslint-config      ESLint presets (TS): base, isomorphic, next
+packages/typescript-config  @kilomita/typescript-config  tsconfig presets (JSON): base, nextjs
+scripts/                    @kilomita/scripts            check-licenses.ts (run by Bun), tripwire.sh (POSIX sh) + tests
 ```
 
 - **Dependency direction:** `web → engine → shared`. Shared never imports engine. The engine test checks `ENGINE_VERSION` against `SpeedTestResultSchema.shape.engineVersion`.
@@ -52,12 +54,28 @@ scripts/          check-licenses.ts (run by Bun), tripwire.sh (POSIX sh)
 
 - **Bun 1.4.4** is the package manager and script runner. Next, tsc, ESLint, Vitest and Playwright have `#!/usr/bin/env node` shebangs, so they **run on Node** (`engines.node >=20.9`, `.node-version` 24). Bun runs only the repo's own `scripts/*.ts`.
 - **TypeScript is pinned `~6.0.3`.** TypeScript 7 (the native port) is outside typescript-eslint's peer range (`<6.1.0`). Revisit when typescript-eslint supports it.
-- **Isolated linker** (`bunfig.toml`). Every workspace declares every package it imports or whose binary it runs. Tooling shared by all workspaces (eslint, vitest, prettier) lives in the root.
+- **Turborepo 2.11** orchestrates workspace tasks (`turbo.json`), adopted 2026-11-01 before Phase 1, with D:\Avi\eazyaza as the reference.
+  - **Root scripts** delegate to `turbo run`. Repo-wide jobs (Prettier, licences, tripwire) stay plain root scripts.
+  - **`transit`** is a no-op task. `typecheck`, `lint` and `test` depend on it, so a change in `@kilomita/shared` invalidates the cached typecheck of engine and web, which consume shared's TS source, without making them wait for a build.
+  - **Strict env mode:** a task only sees env vars declared in `turbo.json`. Undeclared vars vanish, and declared ones are part of the cache key. When code reads a new env var, declare it on the task (`build`: `NEXT_PUBLIC_SITE_URL`; `test:e2e`: `CI`, `PORT`, `NEXT_PUBLIC_SITE_URL`; `dev`: `PORT`, `NEXT_PUBLIC_SITE_URL`). This was verified for e2e: `CI=1` reaches Playwright through turbo (`[WebServer] $ next start`).
+  - **Telemetry:** Turbo collects anonymous telemetry by default. CI sets `TURBO_TELEMETRY_DISABLED=1`. Locally, run `bun x turbo telemetry disable` once.
+  - **No remote cache.** Vercel Remote Cache is a third-party service; ask the maintainer before enabling it.
+  - **Adding a workspace** means adding `package.json` scripts (`lint`, `typecheck`, and `test` if it has tests), an `eslint.config.ts` that calls a preset, and a `tsconfig.json` that extends a preset. A workspace without them is silently skipped by turbo.
+  - **A task that reads another workspace's files must declare that workspace as a dependency.** Otherwise turbo's cache key ignores those files and replays a stale pass. `@kilomita/scripts` lists `@kilomita/shared` and `@kilomita/engine` as devDependencies for exactly this reason: `isomorphic.test.ts` reads their configs. Verified: with a warm cache, regressing `packages/engine/tsconfig.json` makes `scripts#test` miss the cache and fail.
+- **Isolated linker** (`bunfig.toml`). Every workspace declares every package it imports or whose binary it runs, including its own eslint, jiti, typescript, vitest and config presets. The root keeps only turbo, Prettier, Husky, lint-staged, and eslint + jiti for the pre-commit hook.
 - **`trustedDependencies: []`** is explicitly empty. That also disables Bun's built-in default allowlist, so **no dependency runs install scripts**. This is intentional. sharp and @tailwindcss/oxide ship ready-built binaries. Add a package here only after a verified install or runtime failure, and record why in this file.
-- **ESLint:** a single root `eslint.config.ts`, because ESLint 10 resolves config from each file's own directory. typescript-eslint `strictTypeChecked` everywhere, eslint-config-next scoped to `apps/web/**`, and a React/Next import ban in `packages/engine/**`. `jiti` is a devDependency so ESLint can load the TS config on Node.
+- **ESLint:** each workspace has an `eslint.config.ts` calling a preset from `@kilomita/eslint-config` with `import.meta.dirname`. ESLint 10 resolves the nearest config from each file's folder, so per-package configs also work for the root pre-commit hook. Lint is a **gate**: errors fail CI. That differs from eazyaza, which only warns.
+  - `base`: typescript-eslint `strictTypeChecked` with typed linting, plus Prettier.
+  - `isomorphic` (shared, engine): these packages must run in browsers as well as Node. There are two guards:
+    1. **Compile time (primary):** the package `tsconfig.json` sets `types: []` and excludes `eslint.config.ts`, so any Node API (`process`, `globalThis.Buffer`, `node:*` imports) fails `tsc`. `types: []` must stay explicit: `@types/node` is installed for the config file, and TypeScript would otherwise auto-include it. `eslint.config.ts` is type-checked separately by `tsconfig.config.json` (with Node types) as the second step of `typecheck`, and linted without type information.
+    2. **Lint (backstop, clearer messages):** bans Node built-in imports, Node-only globals, and the same names reached through `globalThis`, `window` or `self`. The engine adds a React/Next import ban through the same rule.
+    - `scripts/isomorphic.test.ts` probes both guards against the real shared and engine configs. It must keep failing if either guard regresses.
+  - `next` (web): `eslint-config-next/core-web-vitals`, with `settings.next.rootDir` set to the package.
+  - `jiti` lets ESLint load TS configs on Node.
+- **TypeScript:** each workspace's `tsconfig.json` extends `@kilomita/typescript-config/base.json` or `nextjs.json` and every `.ts` file in the package is type-checked: by `tsconfig.json`, or for shared and engine's `eslint.config.ts`, by `tsconfig.config.json`. There is no root tsconfig, because there are no root TS files.
 - **PostCSS config is JSON** (`apps/web/postcss.config.json`). There are no JS config files, and a data-only file cannot hide injected code.
 - **`.gitattributes` forces LF.** The maintainer's system git has `core.autocrlf=true`, which would otherwise break `prettier --check` on Windows checkouts.
-- **Vitest projects** are `packages/*` and `scripts`. apps/web joins in Phase 2, and its project must exclude `e2e/**`, because Playwright's `test()` throws under Vitest.
+- **Vitest** runs per workspace with defaults and no config files (shared, engine and scripts have a `test` script). When apps/web gets unit tests in Phase 2, add a `vitest.config.ts` there that excludes `e2e/**`, because Playwright's `test()` throws under Vitest.
 - **Playwright** runs `bun run dev` locally (reusing a running server) and `bun run start` after the build in CI.
 - **`apps/web/AGENTS.md` is generated by `next dev`** (Next 16.4 `agentRules`), and `next dev` re-creates it if it's deleted. It is committed as-is. It points agents to the version-matched docs in `apps/web/node_modules/next/dist/docs/`, so read those before writing Next.js code. Next 16 differs from older training data.
 - **Bundle baseline:** in Phase 0, `/` loads 131.5 KiB of gzipped JS on modern browsers: 5 chunks, all Next 16 + React 19 runtime with no app code. Legacy browsers also fetch a 38.5 KiB `noModule` polyfill. Phase 2 adds the engine and UI on top of that, so keep client components small.

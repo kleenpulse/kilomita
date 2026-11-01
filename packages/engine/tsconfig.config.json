@@ -1,0 +1,7 @@
+{
+  "extends": "@kilomita/typescript-config/base.json",
+  "compilerOptions": {
+    "types": ["node"]
+  },
+  "include": ["eslint.config.ts"]
+}

@@ -1,0 +1,24 @@
+{
+  "name": "@kilomita/scripts",
+  "version": "0.0.0",
+  "private": true,
+  "license": "AGPL-3.0-only",
+  "type": "module",
+  "scripts": {
+    "lint": "eslint .",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run"
+  },
+  "devDependencies": {
+    "@kilomita/engine": "workspace:*",
+    "@kilomita/eslint-config": "workspace:*",
+    "@kilomita/shared": "workspace:*",
+    "@kilomita/typescript-config": "workspace:*",
+    "@types/bun": "^1.4.4",
+    "@types/node": "^24",
+    "eslint": "^10.14.0",
+    "jiti": "^2.7.0",
+    "typescript": "~6.0.3",
+    "vitest": "^5.0.5"
+  }
+}

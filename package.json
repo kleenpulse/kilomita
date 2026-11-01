@@ -15,19 +15,20 @@
   },
   "workspaces": [
     "apps/*",
-    "packages/*"
+    "packages/*",
+    "scripts"
   ],
   "trustedDependencies": [],
   "scripts": {
-    "dev": "bun --filter @kilomita/web dev",
-    "build": "bun --filter @kilomita/web build",
+    "dev": "turbo run dev --filter=@kilomita/web",
+    "build": "turbo run build",
     "start": "bun --filter @kilomita/web start",
-    "typecheck": "tsc --noEmit -p . && bun --filter '@kilomita/*' typecheck",
-    "lint": "eslint .",
+    "typecheck": "turbo run typecheck",
+    "lint": "turbo run lint",
+    "test": "turbo run test",
+    "test:e2e": "turbo run test:e2e",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
-    "test": "vitest run",
-    "test:e2e": "bun --filter @kilomita/web test:e2e",
     "licenses": "bun scripts/check-licenses.ts",
     "tripwire": "bun scripts/tripwire.ts",
     "prepare": "husky"
@@ -40,17 +41,11 @@
     "*.{json,md,css,yml,yaml}": "prettier --write"
   },
   "devDependencies": {
-    "@types/bun": "^1.4.4",
-    "@types/node": "^24",
     "eslint": "^10.14.0",
-    "eslint-config-next": "^16.4.3",
-    "eslint-config-prettier": "^10.1.8",
     "husky": "^9.1.7",
     "jiti": "^2.7.0",
     "lint-staged": "^17.6.0",
     "prettier": "^3.9.10",
-    "typescript": "~6.0.3",
-    "typescript-eslint": "^8.72.1",
-    "vitest": "^5.0.5"
+    "turbo": "^2.11.10"
   }
 }

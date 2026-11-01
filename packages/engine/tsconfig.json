@@ -1,5 +1,8 @@
 {
-  "extends": "../../tsconfig.base.json",
+  "extends": "@kilomita/typescript-config/base.json",
+  "compilerOptions": {
+    "types": []
+  },
   "include": ["**/*.ts"],
-  "exclude": ["node_modules"]
+  "exclude": ["node_modules", "eslint.config.ts"]
 }
