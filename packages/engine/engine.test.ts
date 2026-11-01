@@ -303,6 +303,39 @@ describe("latency", () => {
     expect(result.loadedLatency.grade).toBe("A");
   });
 
+  it("reports a loaded p95 at or above the loaded median, within the line's spread", async () => {
+    const result = completed(
+      await scenario({ downMbps: 20, upMbps: 5, rttMs: 40, bloatMs: 100, jitterMs: 30, seed: 7 }),
+    );
+    for (const direction of ["download", "upload"] as const) {
+      const median = result.loadedLatency[`${direction}Ms`];
+      expect(result.loadedP95Ms[direction]).toBeGreaterThan(median);
+      expect(result.loadedP95Ms[direction]).toBeLessThanOrEqual(40 + 100 + 30);
+    }
+  });
+
+  it("leaves probes sent during the warm-up out of the loaded p95, as out of the median", async () => {
+    const network = createSimulatedNetwork({ downMbps: 20, upMbps: 5, rttMs: 40 });
+    let downloading = false;
+    let slowed = false;
+    // The first probe under load answers 2 s late; it is sent before the warm-up ends.
+    const firstLoadedProbeSlow: FetchFn = async (input, init) => {
+      const bytes = Number(new URL(input).searchParams.get("bytes"));
+      if (bytes > 0) downloading = true;
+      const response = await network.fetch(input, init);
+      if (downloading && bytes === 0 && !slowed) {
+        slowed = true;
+        await new Promise((resolve) => setTimeout(resolve, 2000));
+      }
+      return response;
+    };
+    const test = createSpeedTest({ endpoint: cloudflareEndpoint, fetch: firstLoadedProbeSlow });
+    const result = completed(await runTest(test, network, STANDARD_PROFILE));
+    expect(slowed).toBe(true);
+    expect(result.loadedLatency.downloadMs).toBe(40);
+    expect(result.loadedP95Ms.download).toBe(40);
+  });
+
   it("clamps latency at 0 when the server reports more time than was measured", async () => {
     const network = createSimulatedNetwork({ downMbps: 20, upMbps: 5, rttMs: 20 });
     const inflated: FetchFn = async (input, init) => {

@@ -47,6 +47,8 @@ export type EngineResult = Pick<
 > & {
   /** Latency added under load: the larger loaded median minus the idle median. Graded A–F. */
   addedLatencyMs: number;
+  /** 95th-percentile latency under load per phase, from the same probes as the loaded medians. */
+  loadedP95Ms: Record<Direction, number>;
   /** Why each throughput phase ended. "data-cap" means it stopped early to save data. */
   stoppedBy: Record<Direction, StopReason>;
 };

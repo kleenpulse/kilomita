@@ -95,14 +95,19 @@ function failureFrom(outcome: ProbeOutcome | undefined): EngineFailure {
 async function warmUp(ctx: RunContext): Promise<void> {
   const until = Math.min(now() + ctx.profile.stallTimeoutMs, ctx.deadline);
   let last: ProbeOutcome | undefined;
+  let lastFailure: ProbeOutcome | undefined;
   while (now() < until) {
     const outcome = await probe(ctx, until - now(), ctx.signal);
     ctx.signal.throwIfAborted();
     if (outcome.kind === "ok") return;
     last = outcome;
-    if (outcome.kind === "failed") await sleep(RETRY_DELAY_MS, ctx.signal);
+    if (outcome.kind === "failed") {
+      lastFailure = outcome;
+      await sleep(RETRY_DELAY_MS, ctx.signal);
+    }
   }
-  throw failureFrom(last);
+  // A probe cut short by the end of this window says nothing about the server; an answer does.
+  throw failureFrom(lastFailure ?? last);
 }
 
 export interface IdleLatency {

@@ -13,6 +13,11 @@ export default defineConfig({
   use: {
     baseURL,
     trace: "on-first-retry",
+    launchOptions: {
+      // Fence: the speed test host never resolves, so a request the e2e mock doesn't route fails
+      // instead of reaching Cloudflare (dev/manual use only; see CLAUDE.md, launch blocker).
+      args: ["--host-resolver-rules=MAP speed.cloudflare.com ~NOTFOUND"],
+    },
   },
   projects: [{ name: "mobile-chromium", use: { ...devices["Pixel 7"] } }],
   webServer: {

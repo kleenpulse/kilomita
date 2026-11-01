@@ -7,8 +7,8 @@ KiloMita ("How far your network speed?") is a fast.com-style internet speed test
 | Phase | Scope                                              | Status             |
 | ----- | -------------------------------------------------- | ------------------ |
 | 0     | Foundation: monorepo, tooling, CI, shared schemas  | **Done** (295d397) |
-| 1     | Measurement engine (`packages/engine`)             | **Done**           |
-| 2     | Test UI (`apps/web`)                               | Not started        |
+| 1     | Measurement engine (`packages/engine`)             | **Done** (e7d504f) |
+| 2     | Test UI (`apps/web`)                               | **Done**           |
 | 3     | ISP and location detection, consent                | Not started        |
 | 4     | Results API and storage                            | Not started        |
 | 5     | Public insights dashboard                          | Not started        |
@@ -26,7 +26,7 @@ bun run build / bun run start            # turbo build / serve the build
 bun run typecheck                        # turbo: tsc in every workspace
 bun run lint                             # turbo: ESLint in every workspace (errors fail)
 bun run format / bun run format:check    # Prettier, repo-wide (not a turbo task)
-bun run test                             # turbo: Vitest in shared, engine (+ coverage gate), scripts
+bun run test                             # turbo: Vitest in shared, engine (+ coverage gate), web, scripts
 bun --filter @kilomita/web playwright:install && bun run test:e2e   # turbo, builds first
 bun run licenses                         # dependency licence check
 bun run tripwire                         # malware-marker scan (exit 0 clean, 1 found, 2 scan error)
@@ -37,7 +37,7 @@ bun run tripwire                         # malware-marker scan (exit 0 clean, 1 
 ```
 apps/web                    @kilomita/web                Next.js 16 App Router, Tailwind v4, React 19. No src/, no pages/. @/* → ./*
 packages/shared             @kilomita/shared             Zod schemas + constants (brand, 36 states + FCT, ISP list). Depends on zod only.
-packages/engine             @kilomita/engine             Measurement engine: event API, fetch only, runs in browsers, Workers and Node.
+packages/engine             @kilomita/engine             Measurement engine: event API, fetch only, runs in browsers, Workers and Node. Subpath ./limits = caps only.
 packages/eslint-config      @kilomita/eslint-config      ESLint presets (TS): base, isomorphic, next
 packages/typescript-config  @kilomita/typescript-config  tsconfig presets (JSON): base, nextjs
 scripts/                    @kilomita/scripts            check-licenses.ts (run by Bun), tripwire.sh (POSIX sh) + tests
@@ -75,11 +75,15 @@ scripts/                    @kilomita/scripts            check-licenses.ts (run 
 - **TypeScript:** each workspace's `tsconfig.json` extends `@kilomita/typescript-config/base.json` or `nextjs.json` and every `.ts` file in the package is type-checked: by `tsconfig.json`, or for shared and engine's `eslint.config.ts`, by `tsconfig.config.json`. There is no root tsconfig, because there are no root TS files.
 - **PostCSS config is JSON** (`apps/web/postcss.config.json`). There are no JS config files, and a data-only file cannot hide injected code.
 - **`.gitattributes` forces LF.** The maintainer's system git has `core.autocrlf=true`, which would otherwise break `prettier --check` on Windows checkouts.
-- **Vitest** runs per workspace with defaults and no config files (shared, engine and scripts have a `test` script). When apps/web gets unit tests in Phase 2, add a `vitest.config.ts` there that excludes `e2e/**`, because Playwright's `test()` throws under Vitest.
+- **Vitest** runs per workspace with defaults (shared, engine, web and scripts have a `test` script). The only config file is `apps/web/vitest.config.ts`: it excludes `e2e/**`, because Playwright's `test()` throws under Vitest. Web unit tests run in the node environment (no jsdom); browser behaviour is covered by e2e.
   - **Engine coverage gate:** `@vitest/coverage-v8` (maintainer-approved 2026-11-01, engine devDependency only). The engine's `test` script passes the options as CLI flags (still no config file): v8, text report, `stats.ts` + `throughput.ts` + `transfer.ts`, 90% lines, branches and functions. Below that, `test` fails.
 - **Playwright** runs `bun run dev` locally (reusing a running server) and `bun run start` after the build in CI.
+  - **No Cloudflare traffic from e2e, by three layers:** `e2e/mock-endpoint.ts` answers `https://speed.cloudflare.com/**` through `context.route` (which also catches dedicated Worker requests, verified with Playwright 1.64); `playwright.config.ts` launches Chromium with `--host-resolver-rules=MAP speed.cloudflare.com ~NOTFOUND`, so an unrouted request fails DNS (proven on localhost, never against Cloudflare); and every full-run test asserts issued = routed > 0.
+  - The mock is a processor-shared link (in-flight transfers split the capacity, like TCP flows). `route.fulfill` delivers a body in one burst, so readings are only roughly the mock's rates and the e2e bounds are loose. Every answer must come within 5 s (asserted); the engine aborts a request silent for 6 s.
+  - Playwright can't make a tab `hidden` (all methods tried, headless and headed), so the stop-on-hide test overrides `document.visibilityState` and dispatches `visibilitychange`.
+  - Layout shift is a test: an init script records every `layout-shift` entry, including those right after input, and full-run tests assert there are none. Next's dev route announcer also has `role="alert"`, so tests look for alerts inside `<main>`.
 - **`apps/web/AGENTS.md` is generated by `next dev`** (Next 16.4 `agentRules`), and `next dev` re-creates it if it's deleted. It is committed as-is. It points agents to the version-matched docs in `apps/web/node_modules/next/dist/docs/`, so read those before writing Next.js code. Next 16 differs from older training data.
-- **Bundle baseline:** in Phase 0, `/` loads 131.5 KiB of gzipped JS on modern browsers: 5 chunks, all Next 16 + React 19 runtime with no app code. Legacy browsers also fetch a 38.5 KiB `noModule` polyfill. Phase 2 adds the engine and UI on top of that, so keep client components small. The engine alone is 15.1 KB minified, 5.9 KB gzipped (`bun build --target=browser --minify`, 2026-11-01; Next's bundler will differ slightly).
+- **Bundle:** measured by gzipping (level 9) each JS chunk that the prerendered `.next/server/app/index.html` references. Phase 0 (`e7d504f`, same method): 132.0 KiB, 5 chunks, all Next 16 + React 19 runtime (Phase 0 originally reported 131.5 with other gzip settings). Phase 2: 138.0 KiB, 6 chunks (+6.0 KiB, the UI); the Worker's engine chunk (5.7 KiB) loads only on Start. Legacy browsers also fetch a 38.6 KiB `noModule` polyfill. The engine is not in the initial chunks: it loads with the Worker when Start is pressed. Keep it that way: the main thread imports only types and `@kilomita/engine/limits` (the engine has no `sideEffects` declaration, so importing its index would likely pull it all in).
 
 ## Measurement engine (`packages/engine`)
 
@@ -87,7 +91,8 @@ scripts/                    @kilomita/scripts            check-licenses.ts (run 
   - `start()` resolves to `{ status: "complete", result }` or `{ status: "error", error }` and never rejects. A second call returns the same promise.
   - Exactly one terminal event per instance: `complete`, or `error` with code `cancelled`, `network-lost` or `endpoint-error`. `cancel()` before `start()` is the outcome; after the end it does nothing.
   - `progress` comes per latency probe and every 250 ms tick, with `bytesUsed` for the live data counter. Events are plain objects (structured-cloneable), so the engine can run in a Web Worker.
-  - The result is the measurement part of `SpeedTestResult`, plus `addedLatencyMs` (the graded delta) and `stoppedBy` (`stable`, `time` or `data-cap` per direction).
+  - The result is the measurement part of `SpeedTestResult`, plus `addedLatencyMs` (the graded delta), `loadedP95Ms` (95th-percentile latency under load per direction, from the same post-warm-up probes as the loaded medians; added in 0.2.0 for the verdicts) and `stoppedBy` (`stable`, `time` or `data-cap` per direction).
+  - `@kilomita/engine/limits` exports `TEST_LIMITS` (frozen caps and durations per profile) and imports only `profiles.ts`, so a page can show the caps without bundling the engine.
   - A caller's `fetch` is always called as a plain function: a native fetch called as a method throws "Illegal invocation" in browsers (Node doesn't care, so only a test with a `this`-checking fetch catches it).
 - **Files:** `engine.ts` (orchestration, deadlines, events), `latency.ts` (probes, warm-up, loaded probes, grade), `transfer.ts` (streams, ramp, sizing, budget, stall), `throughput.ts` (segment meter, warm-up end, estimate, stability), `stats.ts`, `profiles.ts`, `endpoint.ts` (`TestEndpoint`), `cloudflare.ts` (the only file that knows Cloudflare), `runtime.ts` (run context, failures, timers), `types.ts`. `simulated-network.ts` is a test helper and isn't exported.
 - **Latency:** the first _successful_ probe pays for DNS/TCP/TLS and never counts (it may take up to the 6 s stall timeout on 2G). Then sequential `bytes=0` probes. Sample = request to response headers, minus the server time in `Server-Timing` (`cfRequestDuration`, else the sum of `cfSpeed*`, as Cloudflare's own client does), clamped at 0. Median and p95 by linear interpolation; jitter = mean absolute difference of consecutive samples; loss = failed or timed-out probes ÷ probes sent.
@@ -115,14 +120,44 @@ scripts/                    @kilomita/scripts            check-licenses.ts (run 
   - On slow, high-latency lines (2G, 700 ms), upload reads about 20% low: each POST's reply round trip is counted and there's no time to add a stream. Uploads below about 45 kbps can't finish the first 32 KB POST within the 6 s stall timeout and end as `network-lost`.
   - `bytesUsed` is payload only; overhead isn't measured, so the 5% margin makes going over the cap unlikely, not impossible.
   - Server-time correction uses `Server-Timing` only, without Cloudflare's Resource-Timing calibration.
-  - Background browser tabs throttle timers to ≥ 1 s, which would distort ticks and the deadline; Phase 2 should run the engine in a Worker or warn when the tab is hidden.
+  - Background tabs are throttled (timers ≥ 1 s on the main thread, and a deprioritised renderer that reaches Workers too), so readings in a hidden tab can't be trusted. The web app stops the test when the page is hidden (see "Test UI").
+
+## Test UI (`apps/web`)
+
+- **Files:**
+  - `app/page.tsx` (server shell) renders `components/speed-test.tsx`, the only client island, with `result-panel.tsx` and `low-data-switch.tsx`.
+  - Logic lives in `lib/`: `verdicts.ts`, `format.ts`, `messages.ts`, `low-data.ts`, `run-in-worker.ts` and `speed-test.worker.ts`.
+- **The engine runs in a dedicated Worker** (measured in Phase 2 planning on desktop Chromium, on a paced 20 / 5 Mbps local link):
+  - Under heavy main-thread load (180 ms busy of every 200), a main-thread engine read idle latency 4× too high (200 ms against 50). The Worker read it exactly. A light 40% load hurt neither.
+  - **Lifecycle:** one Worker per run. It is created on Start with `new Worker(new URL("./speed-test.worker.ts", import.meta.url), { type: "module" })` and terminated when the run ends, on Stop, on hide and on unmount. Termination also aborts its requests.
+  - Turbopack builds it as a classic worker behind a `turbopack-worker-*.js` bootstrap, in both `next build` and `next dev`.
+  - Worker files type-check against the DOM lib, so use only `postMessage`, `addEventListener` and `MessageEvent`.
+  - The worker source is also copied to `static/media` but never requested.
+- **Leaving the page stops the test** (maintainer's decision). Hidden tabs were unreliable in both modes: 3 of 7 runs were badly wrong each way (download up to 91% low, wrong grades). So `visibilitychange` → hidden cancels the run, shows why and how much data it used, and no tainted result exists.
+- **Verdicts** (`lib/verdicts.ts`) use cited thresholds only; the sources and the quoted Waveform criteria are in the file header, retrieved 2026-11-01:
+  - Netflix and YouTube for streaming levels (HD 3, Full HD 5, 4K 20 Mbps)
+  - Google Meet / Zoom 720p for HD video calls (1.7 Mbps each way)
+  - Waveform's script for browsing (2 / 0.1 Mbps, median ≤ 500 ms), voice calls (0.1 / 0.1, p95 ≤ 400 ms) and gaming (10 / 3 Mbps, p95 ≤ 40 ms)
+  - Every latency rule is checked idle and under load (failing only under load = "bufferbloat"). Values exactly on a limit pass, as in Waveform's code.
+  - Video calls and 4K use the apps' figures rather than Waveform's stricter generic ones (maintainer's choice); "How we judge this" says so.
+- **Low-data mode:**
+  - Saved in `localStorage` as `kilomita.lowData` (`on` / `off`). With nothing saved it follows Data Saver (`navigator.connection.saveData`).
+  - If storage refuses a write, the choice holds until reload.
+  - `useSyncExternalStore` renders "off" on the server.
+- **Zero layout shift:**
+  - Every box has a fixed size. Results are laid out invisibly from the first paint and revealed with opacity (`motion-safe:` only). Errors overlay the reserved panel.
+  - Every result block is bounded by its longest content: stats are three fixed lines that never wrap, verdict rows are one line with a short reason (`too slow`, `latency too high`, `lags under load`), and the grade note (2 lines) and the low-data "ended early" note (3 lines) reserve room for their longest text at 320 px. A placeholder with short text therefore lays out exactly as tall as a grade F, capped result.
+  - e2e guards it two ways: a worst-case run (grade F through the mock's `bloatMs`, the low-data cap note, the page scrolled to the bottom) at the Pixel 7, 320 px, 375 px and a tall 412×1150 window, asserting no layout shift; and a sweep that compares the panel's height for that result and for the placeholder at every width from 320 to 600 px in 4 px steps. Grade A text fits one line at 412 px and wraps at 320, so only widths in between (375) exposed a missing reservation.
+  - Chromium counts a centred text node that re-centres as a shift. So text that changes inside a fixed box (the big number, the status line, the button label, the cap hint) is keyed by its content, which renders a new node each time. The boxes never move.
+- **Copy:** errors and the method text are in standard English. Pidgin is only in microcopy ("Tap Start. E no go long.", "Your net don finish test!").
+- **Cloudflare** is still the endpoint (dev and manual use only, launch blocker below). The page never contacts it until a human presses Start: there is no preconnect.
 
 ## FOSS and licensing
 
 - **License:** AGPL-3.0-only (`LICENSE`), and every `package.json` says so. All packages are `"private": true`, so nothing is published to npm.
 - **AGPL §13:** the footer links to `SOURCE_URL` (`https://github.com/kleenpulse/kilomita`). Keep the source link visible on every deployed page.
 - **Contact:** GitHub private vulnerability reporting only, for both security issues and Code of Conduct reports. No email address is published.
-- **DCO:** the CI `dco` job requires `Signed-off-by` on every non-merge PR commit. Sign-off certifies a human's rights to the code, so **agents never add `Signed-off-by` lines**. The human submitting signs off.
+- **DCO:** the CI `dco` job requires `Signed-off-by` on every non-merge PR commit. Sign-off certifies a human's rights to the code, so **an agent adds `Signed-off-by` only when the maintainer explicitly says so for that commit** ("sign off as me"). Otherwise the human submitting signs off.
 - **Licence check:** `bun run licenses` walks `node_modules/.bun/<entry>/node_modules/<name>/package.json` plus the workspaces, parses SPDX expressions (AND/OR/WITH, parentheses), and fails on a missing licence field. Data exception: `caniuse-lite` (CC-BY-4.0). Optional platform packages differ between Windows and Linux, so the CI (Linux) run is authoritative.
 - **Launch blocker: Cloudflare's speed test endpoints.** No Cloudflare document grants or forbids third-party use of `speed.cloudflare.com/__down` and `/__up`. Checked 2026-11-01:
   - against: the general website terms ("may not … overburden", "may not exceed or circumvent … limitations … including on any API calls"), and `robots.txt` disallows both paths
@@ -185,8 +220,34 @@ Patterns are written with character classes so the script never matches itself. 
   - engine guards: WebWorker lib, `AbortSignal.timeout`/`any` bans, type-only imports from shared; `isomorphic.test.ts` covers them
 - **Known limitations:** see "Measurement engine". No UI uses the engine yet (Phase 2).
 - **Manual steps for the maintainer:**
-  1. Review the diff, then run `bun install --frozen-lockfile`, then `bun run test` (two commands: Windows PowerShell 5.1 has no `&&`). The engine prints its coverage table. Add `--force` to `turbo run test` to bypass the cache.
+  1. Review the diff, then run `bun install --frozen-lockfile`, then `bun run test` (two commands: Windows PowerShell 5.1 has no `&&`). The engine prints its coverage table. Run `bun run test --force` to bypass the cache.
   2. Optional real-network check, dev use only (≤ 10 MB). Switch WARP or any VPN off for realistic numbers; through WARP, this machine reaches Cloudflare's London edge. Outer double quotes and inner single quotes work in both PowerShell 5.1 (which strips double quotes nested in single quotes when calling programs) and bash:
      `bun -e "import { createSpeedTest, cloudflareEndpoint } from './packages/engine/index.ts'; const t = createSpeedTest({ endpoint: cloudflareEndpoint, lowData: true }); t.on('progress', (e) => console.log(e.phase, e.currentMbps?.toFixed(2) ?? '-', e.latencyMs?.toFixed(0) ?? '-', e.bytesUsed)); console.log(JSON.stringify(await t.start(), null, 2));"`
   3. ~~approve the commit and push, and the DCO sign-off~~ done: approved and signed off by the maintainer on 2026-11-01
   4. Decide whether to ask Cloudflare for written permission now or wait for Phase 6 servers.
+
+## Phase 2 summary
+
+- **Built:**
+  - the test screen: one live download number, Start/Stop, a progressive reveal of upload, latency, jitter, the bufferbloat grade and data used, cited plain-language verdicts, a saved low-data switch, dark mode following the system, and an app icon
+  - the engine in a Worker; leaving the page stops the test
+  - engine 0.2.0: `loadedP95Ms`, the `./limits` subpath, and a warm-up fix (a probe cut short by the 6 s window no longer hides the server's own 4xx/5xx; it was reported as "connection dropped")
+  - web unit tests (46), e2e on a paced mock behind a DNS fence (17), and a lint rule that keeps engine and shared values out of client code
+  - DCO wording: an agent signs off only on the maintainer's explicit word for that commit
+- **Verified 2026-11-01:**
+  - every gate from a cold cache, and e2e in CI mode (`next start`) and local mode (`next dev`)
+  - Lighthouse 13.5.0 mobile (5 runs): performance 96–97 (median 96), accessibility 100, best practices 100, SEO 100, CLS 0. The Phase 0 page measures performance 95 the same way.
+  - 20 of 21 planted bugs were caught by their tests or the lint rule. The survivor is `TEST_LIMITS` imported through the engine's index, checked by the bundle grep alone: Turbopack tree-shakes the engine out of `/` anyway, so the grep has nothing to catch. The lint rule catches the same import.
+- **Known limitations:**
+  - The Worker and hidden-tab evidence is desktop Chromium on one machine, with 3–8 runs per case. Android and iOS were not measured.
+  - Switching apps mid-test (e.g. to answer WhatsApp) stops the run; the data it used is shown, and it must be started again.
+  - Verdicts compare against the test server (Cloudflare's edge), not the apps' own servers. The gaming rule (Waveform: p95 ≤ 40 ms) is strict, and many mobile lines fail it.
+  - The e2e mock delivers each body in one burst, so the e2e checks the flow and wiring, not accuracy (that is the engine's simulated-network tests). With 450 ms of bloat the mock even reads 2.8 Mbps on a 60 Mbps link, while a byte-paced local link with the same bloat reads about 51 Mbps (low-data cap).
+  - Fixed heights are tuned to this machine's system font (Segoe UI) in Chromium. A wider fallback font on another platform could wrap a reserved line.
+  - Zero layout shift is asserted in Chromium only.
+  - The launch blocker stands: the UI still uses Cloudflare's endpoints, for development only.
+- **Manual steps for the maintainer:**
+  1. Review the diff. Then run `bun install --frozen-lockfile`, then `bun run test`, then `bun run test:e2e` (separate commands for PowerShell 5.1). The first e2e run needs `bun --filter @kilomita/web playwright:install`.
+  2. Run `bun run dev` and open http://localhost:3000 (or set `$env:PORT=3931` first if 3000 is busy). Check light and dark mode, a narrow window, Tab/Enter on Start, and the low-data switch surviving a reload. Switch to another tab mid-test: it stops and says why.
+  3. Optional real run, dev use only: switch WARP or any VPN off, turn on low-data mode (≤ 10 MB), press Start. Through WARP this machine reaches Cloudflare in London, so numbers are plumbing checks, not Nigerian speeds.
+  4. Approve the commit and push, and say whether to sign off as you.

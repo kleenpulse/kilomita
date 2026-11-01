@@ -17,7 +17,7 @@ import type {
   SpeedTestOutcome,
 } from "./types";
 
-export const ENGINE_VERSION = "0.1.0";
+export const ENGINE_VERSION = "0.2.0";
 
 const MIN_MAX_BYTES = 1_000_000;
 const MIN_MAX_DURATION_MS = 10_000;
@@ -158,6 +158,7 @@ export function createSpeedTest(options: SpeedTestOptions): SpeedTest {
           serverId: endpoint.id,
           measuredAt,
           addedLatencyMs,
+          loadedP95Ms: { download: download.loadedP95Ms, upload: upload.loadedP95Ms },
           stoppedBy: { download: download.stoppedBy, upload: upload.stoppedBy },
         },
       });

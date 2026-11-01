@@ -190,6 +190,14 @@ describe("runIdleLatency", () => {
     await errorAssertion;
   });
 
+  it("keeps the server's error when the warm-up window cuts its last probe short", async () => {
+    // 503 after 400 ms, retried every 250 ms: the probe sent at 5,850 ms is cut at 6,000 ms.
+    const result = runIdleLatency(testContext(scripted([{ ms: 400, status: 503 }])), deadline);
+    const assertion = expect(result).rejects.toMatchObject({ code: "endpoint-error", status: 503 });
+    await vi.advanceTimersByTimeAsync(6_500);
+    await assertion;
+  });
+
   it("gives up on the warm-up after the stall timeout", async () => {
     const result = runIdleLatency(testContext(scripted(["fail"])), deadline);
     const assertion = expect(result).rejects.toBeInstanceOf(EngineFailure);

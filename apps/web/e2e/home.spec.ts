@@ -13,3 +13,10 @@ test("home page renders the brand and links to the source", async ({ page }) => 
   await expect(page.getByRole("link", { name: "Source code" })).toHaveAttribute("href", SOURCE_URL);
   expect(consoleErrors).toEqual([]);
 });
+
+// The DNS fence is the backstop if a route is ever missing; checked here without any network use.
+test("launches the browser with the speed test host fenced off", () => {
+  expect(test.info().project.use.launchOptions?.args).toContain(
+    "--host-resolver-rules=MAP speed.cloudflare.com ~NOTFOUND",
+  );
+});

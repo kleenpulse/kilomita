@@ -48,7 +48,7 @@ git commit -s -m "Your message"
 
 This adds a `Signed-off-by: Your Name <you@example.com>` line. A CI check rejects pull requests with unsigned commits.
 
-The sign-off is a statement by a **person** that they have the right to submit the code. If an AI coding agent prepared a commit, the human submitting it reviews it and signs it off. An agent must never add a `Signed-off-by` line on anyone's behalf.
+The sign-off is a statement by a **person** that they have the right to submit the code. If an AI coding agent prepared a commit, the human submitting it reviews it and signs it off. An agent adds a `Signed-off-by` line only when that human explicitly tells it to, for that commit, in their own name.
 
 ## Reporting bugs and security issues
 

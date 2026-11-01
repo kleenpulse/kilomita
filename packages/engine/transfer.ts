@@ -14,7 +14,7 @@ import {
   statusError,
   watchdog,
 } from "./runtime";
-import { interquartileMean, mean, median } from "./stats";
+import { interquartileMean, mean, median, percentile } from "./stats";
 import {
   TICK_MS,
   ThroughputMeter,
@@ -115,6 +115,8 @@ export interface PhaseOutcome {
   stoppedBy: StopReason;
   /** Median latency under load. */
   loadedMs: number;
+  /** 95th-percentile latency under load, from the same samples. */
+  loadedP95Ms: number;
 }
 
 export function runThroughputPhase(ctx: RunContext, input: PhaseInput): Promise<PhaseOutcome> {
@@ -253,10 +255,15 @@ class ThroughputPhase {
     // Every probe under load failed.
     if (loaded.length === 0) throw retriesExhausted(this.#loaded?.lastFailureStatus);
     const afterWarmup = loaded.filter((sample) => sample.at >= warmupEndAt);
-    const loadedMs = median(
-      (afterWarmup.length > 0 ? afterWarmup : loaded).map((sample) => sample.ms),
+    const loadedSamples = (afterWarmup.length > 0 ? afterWarmup : loaded).map(
+      (sample) => sample.ms,
     );
-    return { mbps, stoppedBy, loadedMs };
+    return {
+      mbps,
+      stoppedBy,
+      loadedMs: median(loadedSamples),
+      loadedP95Ms: percentile(loadedSamples, 0.95),
+    };
   }
 
   #updateSamples(until: number, includePartial: boolean): void {
