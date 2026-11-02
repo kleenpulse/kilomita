@@ -65,6 +65,42 @@ async function setUp(page: Page, options: MockOptions = {}): Promise<MockStats> 
   return stats;
 }
 
+interface NetworkMock {
+  /** One entry per request to /api/network: the screen-reader status at the time. */
+  calls: string[];
+}
+
+/** Answers /api/network with the given detections in turn (the last one repeats). */
+async function mockNetwork(page: Page, answers: readonly object[]): Promise<NetworkMock> {
+  const mock: NetworkMock = { calls: [] };
+  await page.route("**/api/network", async (route) => {
+    const status = await page
+      .getByRole("status")
+      .textContent()
+      .catch(() => null);
+    mock.calls.push(status ?? "");
+    const answer = answers[Math.min(mock.calls.length - 1, answers.length - 1)];
+    await route.fulfill({ json: answer, headers: { "cache-control": "no-store" } });
+  });
+  return mock;
+}
+
+/** What navigator.connection.type reports (Chromium on Android and ChromeOS only, in reality). */
+async function fakeConnectionType(page: Page, type: string): Promise<void> {
+  await page.addInitScript((value) => {
+    Object.defineProperty(navigator, "connection", {
+      configurable: true,
+      value: { type: value, saveData: false },
+    });
+  }, type);
+}
+
+/** The longest network note (Tizeti/Wifi.ng in the FCT) and hint (Wi-Fi) the page can show. */
+async function longestNetworkContent(page: Page): Promise<NetworkMock> {
+  await fakeConnectionType(page, "wifi");
+  return mockNetwork(page, [{ isp: "tizeti", state: "fct" }]);
+}
+
 function startButton(page: Page) {
   return page.getByRole("button", { name: /^(Start|Test again)$/ });
 }
@@ -296,6 +332,7 @@ for (const [label, viewport, scroll] of [
 
     test("reveals it without shifting the page", async ({ page }) => {
       await setUp(page, { downMbps: 60, upMbps: 20, bloatMs: 450 });
+      await longestNetworkContent(page);
       await page.goto("/");
       await page.getByText("Low-data mode").click();
       await page.getByRole("button", { name: "Start" }).click();
@@ -310,6 +347,8 @@ for (const [label, viewport, scroll] of [
       await expect(stat(page, "Latency under load")).toContainText("grade F");
       await expect(page.getByText(/Ended early to save data/)).toBeVisible();
       await expect(page.getByText("lags under load").first()).toBeVisible();
+      await expect(page.getByTestId("network-note")).toContainText("Tizeti/Wifi.ng");
+      await expect(page.getByTestId("connection-hint")).toContainText("MiFi");
       expect(await layoutShifts(page)).toEqual([]);
     });
   });
@@ -347,5 +386,185 @@ test.describe("result panel height", () => {
     await expect(page.getByText("Test stopped.").first()).toBeVisible();
     const placeholder = await heights();
     expect(longest).toEqual(placeholder);
+  });
+});
+
+test.describe("network details and consent", () => {
+  test.setTimeout(120_000);
+
+  async function finishRun(page: Page): Promise<void> {
+    await startButton(page).click();
+    await expect(page.getByText("Your net don finish test!")).toBeVisible({ timeout: RUN_TIMEOUT });
+  }
+
+  test("asks our server once per finished run, never on load or mid-run", async ({ page }) => {
+    await setUp(page, { downMbps: 30, upMbps: 10 });
+    const network = await mockNetwork(page, [{ isp: null, state: null }]);
+    await page.goto("/");
+    await page.getByText("Low-data mode").click();
+    await page.waitForTimeout(500);
+    expect(network.calls).toEqual([]);
+
+    await startButton(page).click();
+    await expect(page.getByRole("status")).toHaveText(/Testing upload/, { timeout: RUN_TIMEOUT });
+    expect(network.calls).toEqual([]);
+    await expect(page.getByText("Your net don finish test!")).toBeVisible({ timeout: RUN_TIMEOUT });
+    await expect(page.getByTestId("network-note")).toHaveText(
+      "Choose your network and state so this result is labelled correctly.",
+    );
+    expect(network.calls).toHaveLength(1);
+    expect(network.calls[0]).toContain("Test complete");
+
+    // A stopped run detects nothing.
+    await startButton(page).click();
+    await expect(page.getByRole("status")).toHaveText(/Testing download/, { timeout: RUN_TIMEOUT });
+    await page.getByRole("button", { name: "Stop" }).click();
+    await expect(page.getByText("Test stopped.").first()).toBeVisible();
+    await page.waitForTimeout(500);
+    expect(network.calls).toHaveLength(1);
+  });
+
+  test("prefills what it detected and keeps the user's corrections", async ({ page }) => {
+    await setUp(page, { downMbps: 30, upMbps: 10 });
+    await mockNetwork(page, [
+      { isp: "mtn", state: "lagos" },
+      { isp: "mtn", state: "kano" },
+    ]);
+    await page.goto("/");
+    await page.getByText("Low-data mode").click();
+    await finishRun(page);
+
+    const isp = page.getByLabel("Network", { exact: true });
+    const state = page.getByLabel("State", { exact: true });
+    await expect(page.getByTestId("network-note")).toHaveText(
+      "We think you're on MTN in Lagos. Not right? Correct it below.",
+    );
+    await expect(isp).toHaveValue("mtn");
+    await expect(state).toHaveValue("lagos");
+    await expect(page.getByLabel("Connection")).toHaveValue("unknown");
+    await expect(state.locator("option")).toHaveCount(38);
+    await expect(state.locator('option[value="fct"]')).toHaveText("Federal Capital Territory");
+
+    await isp.selectOption("glo");
+    await page.getByLabel("Connection").selectOption("4g");
+    await finishRun(page);
+    // The second detection says Kano: the untouched state follows it, the corrected ISP doesn't.
+    await expect(state).toHaveValue("kano");
+    await expect(isp).toHaveValue("glo");
+    await expect(page.getByLabel("Connection")).toHaveValue("4g");
+  });
+
+  test("hints at the connection when the device says what it is", async ({ page }) => {
+    await setUp(page, { downMbps: 30, upMbps: 10 });
+    await fakeConnectionType(page, "cellular");
+    await page.goto("/");
+    await page.getByText("Low-data mode").click();
+    await finishRun(page);
+    await expect(page.getByTestId("connection-hint")).toHaveText("Your device says mobile data.");
+  });
+
+  test("shares nothing without consent, and remembers the choice", async ({ page }) => {
+    await setUp(page, { downMbps: 30, upMbps: 10 });
+    let resultRequests = 0;
+    await page.route("**/api/results**", (route) => {
+      resultRequests++;
+      return route.abort();
+    });
+    await page.goto("/");
+    await page.getByText("Low-data mode").click();
+    await finishRun(page);
+
+    const status = page.getByTestId("consent-status");
+    await expect(status).toHaveText("Nothing is shared until you choose.");
+    await page.getByRole("button", { name: "Share", exact: true }).click();
+    await expect(status).toHaveText("Sharing is on.");
+    await expect(status).toBeFocused();
+
+    await page.reload();
+    await finishRun(page);
+    await expect(status).toHaveText("Sharing is on.");
+    await page.getByRole("button", { name: "Stop sharing" }).click();
+    await expect(status).toHaveText("Your results aren't shared.");
+    await expect(status).toBeFocused();
+
+    const keys = await page.evaluate(() =>
+      Object.keys(localStorage).filter((key) => key.startsWith("kilomita.")),
+    );
+    expect(keys.sort()).toEqual(["kilomita.consent", "kilomita.lowData"]);
+    expect(await page.evaluate(() => localStorage.getItem("kilomita.consent"))).toBe("declined");
+    expect(resultRequests).toBe(0);
+  });
+
+  test("a double press keeps the choice instead of undoing it", async ({ page }) => {
+    await setUp(page, { downMbps: 30, upMbps: 10 });
+    await page.goto("/");
+    await page.getByText("Low-data mode").click();
+    await finishRun(page);
+
+    const status = page.getByTestId("consent-status");
+    await page.getByRole("button", { name: "Share", exact: true }).focus();
+    await page.keyboard.press("Enter");
+    await page.keyboard.press("Enter");
+    await expect(status).toHaveText("Sharing is on.");
+
+    await page.waitForTimeout(700);
+    await page.getByRole("button", { name: "Stop sharing" }).dblclick();
+    await expect(status).toHaveText("Your results aren't shared.");
+    await page.waitForTimeout(700);
+    expect(await page.evaluate(() => localStorage.getItem("kilomita.consent"))).toBe("declined");
+  });
+});
+
+test.describe("result area height", () => {
+  test.setTimeout(120_000);
+
+  test("is the same at every width for the placeholder, the longest content and each consent state", async ({
+    page,
+  }) => {
+    await setUp(page, { downMbps: 60, upMbps: 20, bloatMs: 450 });
+    await longestNetworkContent(page);
+    await page.goto("/");
+    await page.getByText("Low-data mode").click();
+
+    const widths = Array.from({ length: 71 }, (_, i) => 320 + i * 4);
+    const area = page.getByTestId("result-area");
+    // A fixed-height row hides wrapped or spilled text from the height check, so the consent
+    // card's buttons and status are also checked to stay one line, inside the card.
+    const card = page.locator('section[aria-labelledby="consent-heading"]');
+    const spills = () =>
+      card.evaluate((section) => {
+        const box = section.getBoundingClientRect();
+        return [...section.querySelectorAll("button, [aria-live]")]
+          .filter((el) => {
+            const rect = el.getBoundingClientRect();
+            return rect.right > box.right || el.scrollWidth > el.clientWidth + 1;
+          })
+          .map((el) => el.textContent);
+      });
+    const heights = async () => {
+      const result: number[] = [];
+      for (const width of widths) {
+        await page.setViewportSize({ width, height: 900 });
+        result.push(await area.evaluate((el) => el.getBoundingClientRect().height));
+        expect(await spills(), `at ${String(width)} px`).toEqual([]);
+      }
+      await page.setViewportSize({ width: 412, height: 900 });
+      return result;
+    };
+
+    const placeholder = await heights();
+    await startButton(page).click();
+    await expect(page.getByText("Your net don finish test!")).toBeVisible({ timeout: RUN_TIMEOUT });
+    await expect(stat(page, "Latency under load")).toContainText("grade F");
+    await expect(page.getByText(/Ended early to save data/)).toBeVisible();
+    await expect(page.getByTestId("network-note")).toContainText("Tizeti/Wifi.ng");
+    await expect(page.getByTestId("connection-hint")).toContainText("MiFi");
+    expect(await heights()).toEqual(placeholder);
+
+    await page.getByRole("button", { name: "Share", exact: true }).click();
+    expect(await heights()).toEqual(placeholder);
+    await page.waitForTimeout(700);
+    await page.getByRole("button", { name: "Stop sharing" }).click();
+    expect(await heights()).toEqual(placeholder);
   });
 });

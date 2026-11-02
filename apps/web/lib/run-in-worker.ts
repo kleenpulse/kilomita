@@ -1,7 +1,8 @@
 import type { EngineError, EngineResult, ProgressEvent } from "@kilomita/engine";
 import type { StartCommand, WorkerReply } from "./speed-test.worker";
 
-export type StopReason = "user" | "hidden";
+/** "unmount": the page is going away, so nobody is left to tell. */
+export type StopReason = "user" | "hidden" | "unmount";
 
 export type RunOutcome =
   | { status: "complete"; result: EngineResult }

@@ -2,12 +2,17 @@
 
 import type { EngineResult, Phase, ProgressEvent } from "@kilomita/engine";
 import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from "react";
+import { type ConnectionKind, readConnectionKind } from "@/lib/connection-hint";
+import { readConsent, subscribeConsent, writeConsent } from "@/lib/consent";
+import { type Detection, fetchDetection } from "@/lib/detection";
 import { formatMbps, formatMegabytes } from "@/lib/format";
 import { readLowData, subscribeLowData, writeLowData } from "@/lib/low-data";
 import { CRASHED_MESSAGE, LEFT_PAGE_MESSAGE, errorMessage } from "@/lib/messages";
 import { type Run, type RunOutcome, startRun } from "@/lib/run-in-worker";
+import { ConsentCard } from "./consent-card";
 import { LowDataSwitch } from "./low-data-switch";
-import { PLACEHOLDER_RESULT, ResultPanel } from "./result-panel";
+import { type NetworkSelection, NetworkDetails } from "./network-details";
+import { PLACEHOLDER_RESULT, Reveal, ResultPanel } from "./result-panel";
 
 type View =
   | { status: "idle" }
@@ -82,10 +87,36 @@ function announcement(view: View): string {
 
 export function SpeedTest() {
   const lowData = useSyncExternalStore(subscribeLowData, readLowData, () => false);
+  const consent = useSyncExternalStore(subscribeConsent, readConsent, () => "unasked" as const);
   const [view, setView] = useState<View>({ status: "idle" });
+  const [detection, setDetection] = useState<Detection | "pending" | null>(null);
+  const [selection, setSelection] = useState<NetworkSelection>({
+    isp: null,
+    state: null,
+    type: "unknown",
+  });
+  const [hint, setHint] = useState<ConnectionKind | null>(null);
+  const edited = useRef({ isp: false, state: false });
   const run = useRef<Run | null>(null);
+  /** The latest run started, so a late detection for an older run is dropped. */
+  const lastRun = useRef<Run | null>(null);
   const bytesUsed = useRef(0);
   const running = view.status === "running";
+
+  // Only after a finished run, so the request never competes with a measurement.
+  const detect = useCallback((current: Run) => {
+    setHint(readConnectionKind());
+    setDetection("pending");
+    void fetchDetection().then((found) => {
+      if (run.current !== null || lastRun.current !== current) return;
+      setDetection(found);
+      setSelection((previous) => ({
+        ...previous,
+        isp: edited.current.isp ? previous.isp : found.isp,
+        state: edited.current.state ? previous.state : found.state,
+      }));
+    });
+  }, []);
 
   const onProgress = useCallback((event: ProgressEvent) => {
     bytesUsed.current = event.bytesUsed;
@@ -108,16 +139,19 @@ export function SpeedTest() {
     setView({ status: "running", phase: "latency", download: null, upload: null, bytesUsed: 0 });
     const current = startRun(lowData, onProgress);
     run.current = current;
+    lastRun.current = current;
     void current.outcome.then((outcome) => {
       if (run.current !== current) return;
       run.current = null;
-      setView(
-        outcome.status === "complete"
-          ? { status: "complete", result: outcome.result }
-          : endedView(outcome, bytesUsed.current),
-      );
+      if (outcome.status === "stopped" && outcome.reason === "unmount") return;
+      if (outcome.status === "complete") {
+        setView({ status: "complete", result: outcome.result });
+        detect(current);
+      } else {
+        setView(endedView(outcome, bytesUsed.current));
+      }
     });
-  }, [lowData, onProgress]);
+  }, [lowData, onProgress, detect]);
 
   // Background pages get throttled, Worker included, so a reading taken there can't be trusted.
   useEffect(() => {
@@ -134,12 +168,13 @@ export function SpeedTest() {
   // Leaving the page must not leave a run spending data.
   useEffect(
     () => () => {
-      run.current?.stop("user");
+      run.current?.stop("unmount");
     },
     [],
   );
 
   const ended = view.status === "ended" ? view : null;
+  const complete = view.status === "complete";
   const status = statusText(view);
   const dataUsed = view.status === "running" ? `${formatMegabytes(view.bytesUsed)} used` : null;
   const buttonLabel = running ? "Stop" : view.status === "idle" ? "Start" : "Test again";
@@ -194,11 +229,25 @@ export function SpeedTest() {
         }}
       />
 
-      <div className="relative mt-2 w-full">
-        <ResultPanel
-          result={view.status === "complete" ? view.result : PLACEHOLDER_RESULT}
-          shown={view.status === "complete"}
-        />
+      <div data-testid="result-area" className="relative mt-2 w-full">
+        <ResultPanel result={complete ? view.result : PLACEHOLDER_RESULT} shown={complete} />
+        <div aria-hidden={!complete}>
+          <Reveal shown={complete} order={5} className="mt-8">
+            <NetworkDetails
+              detection={detection}
+              selection={selection}
+              hint={hint}
+              onChange={(change) => {
+                if ("isp" in change) edited.current.isp = true;
+                if ("state" in change) edited.current.state = true;
+                setSelection((previous) => ({ ...previous, ...change }));
+              }}
+            />
+          </Reveal>
+          <Reveal shown={complete} order={6} className="mt-6">
+            <ConsentCard consent={consent} onChoose={writeConsent} />
+          </Reveal>
+        </div>
         {ended ? (
           <div
             role={ended.alert ? "alert" : undefined}

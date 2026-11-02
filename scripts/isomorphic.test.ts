@@ -138,3 +138,38 @@ describe("@kilomita/engine guards", { timeout: 60_000 }, () => {
     );
   });
 });
+
+describe("@kilomita/shared ./lists guard", { timeout: 60_000 }, () => {
+  const dir = packageDir("shared");
+  const source = [
+    'import { readFileSync } from "node:fs";',
+    'import { z } from "zod";',
+    'import { NetworkTypeSchema } from "./schemas";',
+    "export const keep = [readFileSync, z, NetworkTypeSchema];",
+  ].join("\n");
+
+  async function flagged(file: string) {
+    const eslint = new ESLint({ cwd: dir });
+    const [result] = await eslint.lintText(source, { filePath: join(dir, file) });
+    return (result?.messages ?? [])
+      .filter((message) => message.ruleId?.endsWith("no-restricted-imports"))
+      .map((message) => `${String(message.line)} ${message.ruleId ?? ""}`)
+      .sort();
+  }
+
+  // The zod ban must not replace the Node ban: both rules fire on the same file.
+  it.each(["lists.ts", "isps.ts", "states.ts", "network-types.ts"])(
+    "keeps %s free of Node and zod",
+    async (file) => {
+      expect(await flagged(file)).toEqual([
+        "1 no-restricted-imports",
+        "2 @typescript-eslint/no-restricted-imports",
+        "3 @typescript-eslint/no-restricted-imports",
+      ]);
+    },
+  );
+
+  it("lets the rest of shared use zod, but still not Node", async () => {
+    expect(await flagged("schemas.ts")).toEqual(["1 no-restricted-imports"]);
+  });
+});

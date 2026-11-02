@@ -20,6 +20,13 @@ export default function HomePage() {
           className="underline underline-offset-2 hover:text-neutral-800 dark:hover:text-neutral-200"
         >
           Source code
+        </a>{" "}
+        ·{" "}
+        <a
+          href="/privacy"
+          className="underline underline-offset-2 hover:text-neutral-800 dark:hover:text-neutral-200"
+        >
+          Privacy
         </a>
       </footer>
     </div>

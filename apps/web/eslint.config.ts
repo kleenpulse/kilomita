@@ -29,6 +29,28 @@ const config = [
       "@typescript-eslint/no-import-type-side-effects": "error",
     },
   },
+  {
+    // Server code (Node built-ins, the ASN table, IP handling) stays out of anything that could
+    // reach the client, including a future "use client" file in app/.
+    files: ["**/*.{ts,tsx}"],
+    ignores: ["server/**", "app/api/**", "**/*.test.ts"],
+    rules: {
+      "no-restricted-imports": [
+        "error",
+        {
+          patterns: [
+            {
+              // Not "**/server": that would also catch next/server.
+              group: ["@/server", "@/server/*", "./server", "./server/*"].concat(
+                ["../", "../../", "../../../"].flatMap((up) => [`${up}server`, `${up}server/*`]),
+              ),
+              message: "Server-only code: import it from server/ or app/api/ only.",
+            },
+          ],
+        },
+      ],
+    },
+  },
 ];
 
 export default config;

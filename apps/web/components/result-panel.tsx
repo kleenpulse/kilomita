@@ -26,7 +26,7 @@ interface Props {
 }
 
 /** Staggered fade-in, only for people who haven't asked for reduced motion. */
-function Reveal({
+export function Reveal({
   shown,
   order,
   children,

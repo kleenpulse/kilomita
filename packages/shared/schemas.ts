@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { ISP_SLUGS } from "./isps";
+import { NETWORK_TYPES } from "./network-types";
 import { STATE_SLUGS } from "./states";
 
 const SLUG_PATTERN = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
@@ -7,16 +8,7 @@ const SEMVER_PATTERN = /^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?$/;
 
 const nonNegative = z.number().nonnegative();
 
-export const NetworkTypeSchema = z.enum([
-  "2g",
-  "3g",
-  "4g",
-  "5g",
-  "fiber",
-  "fixed-wireless",
-  "satellite",
-  "unknown",
-]);
+export const NetworkTypeSchema = z.enum(NETWORK_TYPES);
 export type NetworkType = z.infer<typeof NetworkTypeSchema>;
 
 export const BufferbloatGradeSchema = z.enum(["A", "B", "C", "D", "F"]);

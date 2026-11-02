@@ -1,15 +1,11 @@
-const STORAGE_KEY = "kilomita.lowData";
+import { storedChoice } from "./stored-choice";
 
-type Listener = () => void;
-const listeners = new Set<Listener>();
-/** The latest choice when storage refused it, so this page keeps it until reload. */
-let unsaved: boolean | null = null;
+const choice = storedChoice("kilomita.lowData", ["on", "off"] as const);
 
 /** A stored choice, or null when there is none (or it is garbage). */
 export function parseStored(value: string | null): boolean | null {
-  if (value === "on") return true;
-  if (value === "off") return false;
-  return null;
+  const stored = choice.parse(value);
+  return stored === null ? null : stored === "on";
 }
 
 /** The user's own choice wins; without one, follow the browser's Data Saver. */
@@ -28,38 +24,14 @@ export function readLowData(
   getStorage: () => Pick<Storage, "getItem"> = () => window.localStorage,
   saveData: () => boolean = browserSaveData,
 ): boolean {
-  if (unsaved !== null) return unsaved;
-  let stored: string | null = null;
-  try {
-    stored = getStorage().getItem(STORAGE_KEY);
-  } catch {
-    // Fall back to the default.
-  }
-  return resolveLowData(stored, saveData());
+  return resolveLowData(choice.read(getStorage), saveData());
 }
 
 export function writeLowData(
   on: boolean,
   getStorage: () => Pick<Storage, "setItem"> = () => window.localStorage,
 ): void {
-  try {
-    getStorage().setItem(STORAGE_KEY, on ? "on" : "off");
-    unsaved = null;
-  } catch {
-    unsaved = on;
-  }
-  for (const listener of listeners) listener();
+  choice.write(on ? "on" : "off", getStorage);
 }
 
-/** For useSyncExternalStore: changes from this tab and from other tabs. */
-export function subscribeLowData(listener: Listener): () => void {
-  listeners.add(listener);
-  const onStorage = (event: StorageEvent) => {
-    if (event.key === STORAGE_KEY) listener();
-  };
-  window.addEventListener("storage", onStorage);
-  return () => {
-    listeners.delete(listener);
-    window.removeEventListener("storage", onStorage);
-  };
-}
+export const subscribeLowData = choice.subscribe;

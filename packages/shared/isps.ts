@@ -5,7 +5,7 @@ export const ISPS = [
   { slug: "9mobile", name: "9mobile" },
   { slug: "spectranet", name: "Spectranet" },
   { slug: "smile", name: "Smile" },
-  { slug: "fibreone", name: "FibreOne" },
+  { slug: "fiberone", name: "FiberOne" },
   { slug: "ipnx", name: "ipNX" },
   { slug: "tizeti", name: "Tizeti/Wifi.ng" },
   { slug: "starlink", name: "Starlink" },

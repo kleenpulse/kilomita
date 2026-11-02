@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
+import { NETWORK_TYPES } from "./network-types";
 import {
   IspSchema,
+  NetworkTypeSchema,
   NigerianStateSchema,
   SpeedTestResultSchema,
   type SpeedTestResult,
@@ -77,5 +79,12 @@ describe("IspSchema", () => {
   it("requires a known slug and a name", () => {
     expect(IspSchema.safeParse({ slug: "glo", name: "Glo" }).success).toBe(true);
     expect(IspSchema.safeParse({ slug: "glo", name: "" }).success).toBe(false);
+  });
+});
+
+describe("NetworkTypeSchema", () => {
+  it("accepts exactly the zod-free NETWORK_TYPES list", () => {
+    expect(NetworkTypeSchema.options).toEqual([...NETWORK_TYPES]);
+    expect(NetworkTypeSchema.options).toHaveLength(8);
   });
 });

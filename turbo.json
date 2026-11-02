@@ -28,7 +28,7 @@
     "dev": {
       "cache": false,
       "persistent": true,
-      "env": ["PORT", "NEXT_PUBLIC_SITE_URL"]
+      "env": ["PORT", "NEXT_PUBLIC_SITE_URL", "CLIENT_IP_HEADER"]
     }
   }
 }
