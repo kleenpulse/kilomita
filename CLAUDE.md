@@ -9,7 +9,7 @@ KiloMita ("How far your network speed?") is a fast.com-style internet speed test
 | 0     | Foundation: monorepo, tooling, CI, shared schemas  | **Done** (295d397) |
 | 1     | Measurement engine (`packages/engine`)             | **Done** (e7d504f) |
 | 2     | Test UI (`apps/web`)                               | **Done** (a7e2dae) |
-| 3     | ISP and location detection, consent                | **Done**           |
+| 3     | ISP and location detection, consent                | **Done** (876b9ad) |
 | 4     | Results API and storage                            | Not started        |
 | 5     | Public insights dashboard                          | Not started        |
 | 6     | Own test servers (`apps/server`), share cards, PWA | Not started        |
@@ -151,6 +151,8 @@ scripts/                    @kilomita/scripts            check-licenses.ts (run 
   - Every box has a fixed size. Results are laid out invisibly from the first paint and revealed with opacity (`motion-safe:` only). Errors overlay the reserved panel.
   - Every result block is bounded by its longest content: stats are three fixed lines that never wrap, verdict rows are one line with a short reason (`too slow`, `latency too high`, `lags under load`), and the grade note (2 lines) and the low-data "ended early" note (3 lines) reserve room for their longest text at 320 px. A placeholder with short text therefore lays out exactly as tall as a grade F, capped result.
   - e2e guards it two ways: a worst-case run (grade F through the mock's `bloatMs`, the low-data cap note, the page scrolled to the bottom) at the Pixel 7, 320 px, 375 px and a tall 412×1150 window, asserting no layout shift; and a sweep that compares the panel's height for that result and for the placeholder at every width from 320 to 600 px in 4 px steps. Grade A text fits one line at 412 px and wraps at 320, so only widths in between (375) exposed a missing reservation.
+  - **Wide-font pass:** a fixed box is only as safe as the widest font a visitor gets. Every layout test (at 320 px, the four worst-case runs, both height sweeps) also runs with Verdana or DejaVu Sans forced from the first paint; both are wider than Segoe UI and Roboto. A canvas measurement against two generic fallbacks fails the test if neither font is installed, so the pass can't quietly test the normal font (`document.fonts.check()` says true for a missing local font). Verdana is checked only on Windows runs: CI has no Verdana and uses DejaVu Sans, which is probably Ubuntu's `system-ui` fallback already, so there both passes may measure about the same font.
+  - **Overflow check:** in every layout test and at every sweep width, no element in the result area may overflow its own box, sideways or downwards, or cross the area's edges. A fixed-height box hides wrapped or spilled text from a height check, so heights alone can't catch it. Selects (which clip long names on purpose) and sr-only text are skipped, and transforms are switched off while measuring, because hidden reveals sit 4 px lower (`translate-y-1`), which stretches `scrollHeight` without moving layout.
   - Chromium counts a centred text node that re-centres as a shift. So text that changes inside a fixed box (the big number, the status line, the button label, the cap hint) is keyed by its content, which renders a new node each time. The boxes never move.
 - **After a result** (revealed with it, laid out invisibly from the first paint like the rest of the result area):
   - `network-details.tsx`: a note ("We think you're on MTN in Lagos. Not right? Correct it below.") and three native selects with explicit `htmlFor` labels (a select wrapped in its label takes the selected option into its accessible name). Detection fills only fields the user hasn't changed; corrections last for the session, not across reloads.
@@ -268,7 +270,7 @@ Patterns are written with character classes so the script never matches itself. 
   - Switching apps mid-test (e.g. to answer WhatsApp) stops the run; the data it used is shown, and it must be started again.
   - Verdicts compare against the test server (Cloudflare's edge), not the apps' own servers. The gaming rule (Waveform: p95 ≤ 40 ms) is strict, and many mobile lines fail it.
   - The e2e mock delivers each body in one burst, so the e2e checks the flow and wiring, not accuracy (that is the engine's simulated-network tests). With 450 ms of bloat the mock even reads 2.8 Mbps on a 60 Mbps link, while a byte-paced local link with the same bloat reads about 51 Mbps (low-data cap).
-  - Fixed heights are tuned to this machine's system font (Segoe UI) in Chromium. A wider fallback font on another platform could wrap a reserved line.
+  - Fixed heights are tuned to this machine's system font (Segoe UI) in Chromium. A wider fallback font on another platform could wrap a reserved line. This happened: Phase 3's first CI run failed on Linux. Since the Phase 3 hotfix, every e2e run also checks the layout in a forced wide font (Verdana or DejaVu Sans), and CI checks it in Linux's own font. Roboto on a real Android device and iOS's fonts are still unmeasured.
   - Zero layout shift is asserted in Chromium only.
   - The launch blocker stands: the UI still uses Cloudflare's endpoints, for development only.
 - **Manual steps for the maintainer:**
@@ -286,9 +288,9 @@ Patterns are written with character classes so the script never matches itself. 
   - consent: ask once, remember, change any time; the `mayShare` gate for Phase 4; nothing is sent in Phase 3
   - the hashed IP prefix with a random, daily, never-derived salt (`SaltStore`), ready for Phase 4
   - `/privacy` for this version, linked from the footer and the consent card
-  - tests: shared 28 (was 20), web 122 (was 46), scripts 55 (was 50), engine 122; e2e 25 (was 17)
+  - tests: shared 28 (was 20), web 122 (was 46), scripts 55 (was 50), engine 122; e2e 32 (was 17; 25 before the hotfix)
 - **Verified 2026-11-02:**
-  - every gate from a cold cache (15 of 15 turbo tasks), tripwire, licences and format; e2e in CI mode (`next start`) and local mode (`next dev`) through turbo
+  - every gate from a cold cache (15 of 15 turbo tasks), tripwire, licences and format; e2e in CI mode (`next start`) and local mode (`next dev`) through turbo, **on Windows only**. The first CI run on `876b9ad` (Linux, run 41466044659) failed e2e: at 320 px the consent status "Nothing is shared until you choose." spilled out of its one-line row in Ubuntu's wider fallback font. The hotfix commit after it fixes that: the status box reserves 2 lines, the stat label "Latency under load" became "Loaded latency" (in Verdana it was 7 px too wide for its column at 320 px), and the wide-font pass and overflow check were added (see "Zero layout shift"); e2e went from 25 to 32 tests.
   - a clean clone exported through a throwaway index (the real index hash unchanged): frozen install, every gate, e2e (25 of 25, CI mode), and dev → 200 on `/`, `/privacy` and `/api/network`
   - 30 of 30 planted bugs caught (28, plus 2 for the checkpoint-1 fixes: the privacy page claiming the code never identifies anyone, and an invalid header name throwing). Six were re-run to confirm each failed on its own assertion, not on a build error.
   - zero layout shift: the worst-case runs (Pixel 7, 320, 375, 412×1150) now include the longest network note and hint; the 320–600 px sweep covers the placeholder, the longest content and every consent state, and checks that no consent button or status spills out of its card

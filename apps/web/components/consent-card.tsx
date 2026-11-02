@@ -46,12 +46,14 @@ export function ConsentCard({ consent, onChoose }: Props) {
         We never store your IP address, only a scrambled code made from part of it, which can&apos;t
         be traced back after a day.
       </p>
+      {/* Two lines reserved, so a wider font than ours can wrap the status without moving the
+          buttons. */}
       <p
         ref={status}
         tabIndex={-1}
         aria-live="polite"
         data-testid="consent-status"
-        className="mt-3 h-5 text-sm font-semibold whitespace-nowrap focus:outline-none"
+        className="mt-3 h-10 text-sm font-semibold focus:outline-none"
       >
         <span key={consent}>{STATUS[consent]}</span>
       </p>

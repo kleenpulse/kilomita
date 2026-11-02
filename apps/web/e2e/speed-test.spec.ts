@@ -125,6 +125,83 @@ function expectAllRouted(stats: MockStats): void {
   expect(stats.maxDelayMs).toBeLessThan(5_000);
 }
 
+// Fixed heights are only as safe as the widest font a visitor might get. Verdana (Windows) and
+// DejaVu Sans (CI's Linux) are wider than Segoe UI and Roboto, so every layout test also runs in
+// one of them.
+const WIDE_FONTS = ["Verdana", "DejaVu Sans"] as const;
+const FONT_PASSES = [
+  { wide: false, title: "" },
+  { wide: true, title: " (wide font)" },
+] as const;
+
+/** Forces the wide font from the first paint on. Call before page.goto, then expectWideFont. */
+async function forceWideFont(page: Page): Promise<void> {
+  await page.addInitScript((fonts) => {
+    const sheet = new CSSStyleSheet();
+    const stack = fonts.map((font) => `"${font}"`).join(", ");
+    sheet.replaceSync(`body, body * { font-family: ${stack}, sans-serif !important; }`);
+    document.adoptedStyleSheets = [...document.adoptedStyleSheets, sheet];
+  }, WIDE_FONTS);
+}
+
+/**
+ * Fails unless a wide font is installed and in use: otherwise the "wide" pass would quietly test
+ * the normal font. document.fonts.check() says true for a missing local font, so this measures:
+ * a font is present only if it changes a probe's width against two different generic fallbacks.
+ */
+async function expectWideFont(page: Page): Promise<void> {
+  const state = await page.evaluate((fonts) => {
+    const context = document.createElement("canvas").getContext("2d");
+    if (!context) return { present: [], body: "" };
+    const width = (font: string) => {
+      context.font = `32px ${font}`;
+      return context.measureText("mmmmmmmmmmlli WW 0123456789").width;
+    };
+    const present = fonts.filter((font) =>
+      ["monospace", "serif"].every((generic) => width(`"${font}", ${generic}`) !== width(generic)),
+    );
+    return { present, body: getComputedStyle(document.body).fontFamily };
+  }, WIDE_FONTS);
+  expect(state.present, "a wide font is installed").not.toEqual([]);
+  expect(state.body).toMatch(/^"?Verdana"?, "?DejaVu Sans"?/);
+}
+
+/**
+ * Everything in the result area that overflows its own box, sideways or downwards. A fixed-height
+ * box hides wrapped or spilled text from a height check, so this catches what heights can't.
+ * Selects clip long names on purpose; sr-only text is a 1 px clipped box by design. Hidden
+ * reveals sit 4 px lower (translate) and slide up when shown; a transform never moves layout but
+ * does stretch scrollHeight, so transforms are switched off while measuring. If anything in the
+ * result area is ever positioned with a transform, this measures it untransformed: revisit.
+ */
+async function overflows(page: Page): Promise<string[]> {
+  return page.getByTestId("result-area").evaluate((area) => {
+    const still = new CSSStyleSheet();
+    still.replaceSync(
+      "* { translate: none !important; transform: none !important; transition: none !important; }",
+    );
+    document.adoptedStyleSheets = [...document.adoptedStyleSheets, still];
+    try {
+      const box = area.getBoundingClientRect();
+      return [...area.querySelectorAll<HTMLElement>("*")]
+        .filter((el) => el.tagName !== "SELECT" && !el.closest("select, .sr-only"))
+        .flatMap((el) => {
+          const rect = el.getBoundingClientRect();
+          if (rect.width === 0 && rect.height === 0) return [];
+          const outside = rect.left < box.left - 0.5 || rect.right > box.right + 0.5;
+          const overflowing =
+            el.scrollWidth > el.clientWidth + 1 || el.scrollHeight > el.clientHeight + 1;
+          if (!outside && !overflowing) return [];
+          const size = `${String(el.scrollWidth)}x${String(el.scrollHeight)} in ${String(el.clientWidth)}x${String(el.clientHeight)}`;
+          const where = `x ${String(Math.round(rect.left))}..${String(Math.round(rect.right))} of ${String(Math.round(box.left))}..${String(Math.round(box.right))}`;
+          return [`${el.tagName.toLowerCase()} "${el.textContent.slice(0, 40)}" ${size}, ${where}`];
+        });
+    } finally {
+      document.adoptedStyleSheets = document.adoptedStyleSheets.filter((sheet) => sheet !== still);
+    }
+  });
+}
+
 test.describe("speed test", () => {
   test.setTimeout(90_000);
 
@@ -158,7 +235,7 @@ test.describe("speed test", () => {
 
     await expect(stat(page, "Latency")).toHaveText(/^\d+ msidle$/);
     await expect(stat(page, "Jitter")).toHaveText(/^\d+ ms$/);
-    await expect(stat(page, "Latency under load")).toContainText("grade A");
+    await expect(stat(page, "Loaded latency")).toContainText("grade A");
     const used = megabytes((await stat(page, "Data used").textContent()) ?? "");
     expect(used).toBeGreaterThan(0);
     expect(used).toBeLessThanOrEqual(50);
@@ -300,94 +377,113 @@ test.describe("speed test", () => {
   });
 });
 
-test.describe("at 320 px", () => {
-  test.setTimeout(90_000);
-  test.use({ viewport: { width: 320, height: 640 } });
-
-  test("fits without horizontal scroll and doesn't shift through a run", async ({ page }) => {
-    await setUp(page, { downMbps: 30, upMbps: 10 });
-    await page.goto("/");
-    await page.getByText("Low-data mode").click();
-    await page.getByRole("button", { name: "Start" }).click();
-    await expect(page.getByText("Your net don finish test!")).toBeVisible({ timeout: RUN_TIMEOUT });
-    const overflow = await page.evaluate(
-      () => document.documentElement.scrollWidth - document.documentElement.clientWidth,
-    );
-    expect(overflow).toBe(0);
-    expect(await layoutShifts(page)).toEqual([]);
-  });
-});
-
-// The longest result the panel can show: grade F (bloat), failing rows and the low-data cap note.
-// Space for it is reserved from the first paint, so the footer never moves when it appears.
-for (const [label, viewport, scroll] of [
-  ["Pixel 7, scrolled down", null, true],
-  ["320 px, scrolled down", { width: 320, height: 640 }, true],
-  ["375 px, scrolled down", { width: 375, height: 667 }, true],
-  ["a tall window", { width: 412, height: 1150 }, false],
-] as const) {
-  test.describe(`worst-case result in ${label}`, () => {
+for (const font of FONT_PASSES) {
+  test.describe(`at 320 px${font.title}`, () => {
     test.setTimeout(90_000);
-    if (viewport) test.use({ viewport });
+    test.use({ viewport: { width: 320, height: 640 } });
 
-    test("reveals it without shifting the page", async ({ page }) => {
-      await setUp(page, { downMbps: 60, upMbps: 20, bloatMs: 450 });
-      await longestNetworkContent(page);
+    test("fits without horizontal scroll and doesn't shift through a run", async ({ page }) => {
+      await setUp(page, { downMbps: 30, upMbps: 10 });
+      if (font.wide) await forceWideFont(page);
       await page.goto("/");
+      if (font.wide) await expectWideFont(page);
       await page.getByText("Low-data mode").click();
       await page.getByRole("button", { name: "Start" }).click();
-      if (scroll) {
-        await page.evaluate(() => {
-          window.scrollTo(0, document.documentElement.scrollHeight);
-        });
-      }
       await expect(page.getByText("Your net don finish test!")).toBeVisible({
         timeout: RUN_TIMEOUT,
       });
-      await expect(stat(page, "Latency under load")).toContainText("grade F");
-      await expect(page.getByText(/Ended early to save data/)).toBeVisible();
-      await expect(page.getByText("lags under load").first()).toBeVisible();
-      await expect(page.getByTestId("network-note")).toContainText("Tizeti/Wifi.ng");
-      await expect(page.getByTestId("connection-hint")).toContainText("MiFi");
+      const overflow = await page.evaluate(
+        () => document.documentElement.scrollWidth - document.documentElement.clientWidth,
+      );
+      expect(overflow).toBe(0);
+      expect(await overflows(page)).toEqual([]);
       expect(await layoutShifts(page)).toEqual([]);
     });
   });
 }
 
-test.describe("result panel height", () => {
-  test.setTimeout(90_000);
+// The longest result the panel can show: grade F (bloat), failing rows and the low-data cap note.
+// Space for it is reserved from the first paint, so the footer never moves when it appears.
+for (const font of FONT_PASSES) {
+  for (const [label, viewport, scroll] of [
+    ["Pixel 7, scrolled down", null, true],
+    ["320 px, scrolled down", { width: 320, height: 640 }, true],
+    ["375 px, scrolled down", { width: 375, height: 667 }, true],
+    ["a tall window", { width: 412, height: 1150 }, false],
+  ] as const) {
+    test.describe(`worst-case result in ${label}${font.title}`, () => {
+      test.setTimeout(90_000);
+      if (viewport) test.use({ viewport });
 
-  test("is the same for the longest result and the placeholder at every width", async ({
-    page,
-  }) => {
-    await setUp(page, { downMbps: 60, upMbps: 20, bloatMs: 450 });
-    await page.goto("/");
-    await page.getByText("Low-data mode").click();
-    await page.getByRole("button", { name: "Start" }).click();
-    await expect(page.getByText("Your net don finish test!")).toBeVisible({ timeout: RUN_TIMEOUT });
-    await expect(stat(page, "Latency under load")).toContainText("grade F");
-    await expect(page.getByText(/Ended early to save data/)).toBeVisible();
+      test("reveals it without shifting the page", async ({ page }) => {
+        await setUp(page, { downMbps: 60, upMbps: 20, bloatMs: 450 });
+        await longestNetworkContent(page);
+        if (font.wide) await forceWideFont(page);
+        await page.goto("/");
+        if (font.wide) await expectWideFont(page);
+        await page.getByText("Low-data mode").click();
+        await page.getByRole("button", { name: "Start" }).click();
+        if (scroll) {
+          await page.evaluate(() => {
+            window.scrollTo(0, document.documentElement.scrollHeight);
+          });
+        }
+        await expect(page.getByText("Your net don finish test!")).toBeVisible({
+          timeout: RUN_TIMEOUT,
+        });
+        await expect(stat(page, "Loaded latency")).toContainText("grade F");
+        await expect(page.getByText(/Ended early to save data/)).toBeVisible();
+        await expect(page.getByText("lags under load").first()).toBeVisible();
+        await expect(page.getByTestId("network-note")).toContainText("Tizeti/Wifi.ng");
+        await expect(page.getByTestId("connection-hint")).toContainText("MiFi");
+        expect(await overflows(page)).toEqual([]);
+        expect(await layoutShifts(page)).toEqual([]);
+      });
+    });
+  }
+}
 
-    const widths = Array.from({ length: 71 }, (_, i) => 320 + i * 4);
-    const panel = page.locator('section[aria-labelledby="results-heading"]');
-    const heights = async () => {
-      const result: number[] = [];
-      for (const width of widths) {
-        await page.setViewportSize({ width, height: 900 });
-        result.push(await panel.evaluate((el) => el.getBoundingClientRect().height));
-      }
-      return result;
-    };
+for (const font of FONT_PASSES) {
+  test.describe(`result panel height${font.title}`, () => {
+    test.setTimeout(90_000);
 
-    const longest = await heights();
-    await page.setViewportSize({ width: 412, height: 900 });
-    await page.getByRole("button", { name: "Test again" }).click();
-    await page.getByRole("button", { name: "Stop" }).click();
-    await expect(page.getByText("Test stopped.").first()).toBeVisible();
-    const placeholder = await heights();
-    expect(longest).toEqual(placeholder);
+    test("is the same for the longest result and the placeholder at every width", async ({
+      page,
+    }) => {
+      await setUp(page, { downMbps: 60, upMbps: 20, bloatMs: 450 });
+      if (font.wide) await forceWideFont(page);
+      await page.goto("/");
+      if (font.wide) await expectWideFont(page);
+      await page.getByText("Low-data mode").click();
+      await page.getByRole("button", { name: "Start" }).click();
+      await expect(page.getByText("Your net don finish test!")).toBeVisible({
+        timeout: RUN_TIMEOUT,
+      });
+      await expect(stat(page, "Loaded latency")).toContainText("grade F");
+      await expect(page.getByText(/Ended early to save data/)).toBeVisible();
+
+      const widths = Array.from({ length: 71 }, (_, i) => 320 + i * 4);
+      const panel = page.locator('section[aria-labelledby="results-heading"]');
+      const heights = async () => {
+        const result: number[] = [];
+        for (const width of widths) {
+          await page.setViewportSize({ width, height: 900 });
+          result.push(await panel.evaluate((el) => el.getBoundingClientRect().height));
+          expect(await overflows(page), `at ${String(width)} px`).toEqual([]);
+        }
+        return result;
+      };
+
+      const longest = await heights();
+      await page.setViewportSize({ width: 412, height: 900 });
+      await page.getByRole("button", { name: "Test again" }).click();
+      await page.getByRole("button", { name: "Stop" }).click();
+      await expect(page.getByText("Test stopped.").first()).toBeVisible();
+      const placeholder = await heights();
+      expect(longest).toEqual(placeholder);
+    });
   });
-});
+}
 
 test.describe("network details and consent", () => {
   test.setTimeout(120_000);
@@ -515,56 +611,49 @@ test.describe("network details and consent", () => {
   });
 });
 
-test.describe("result area height", () => {
-  test.setTimeout(120_000);
+for (const font of FONT_PASSES) {
+  test.describe(`result area height${font.title}`, () => {
+    test.setTimeout(120_000);
 
-  test("is the same at every width for the placeholder, the longest content and each consent state", async ({
-    page,
-  }) => {
-    await setUp(page, { downMbps: 60, upMbps: 20, bloatMs: 450 });
-    await longestNetworkContent(page);
-    await page.goto("/");
-    await page.getByText("Low-data mode").click();
+    test("is the same at every width for the placeholder, the longest content and each consent state", async ({
+      page,
+    }) => {
+      await setUp(page, { downMbps: 60, upMbps: 20, bloatMs: 450 });
+      await longestNetworkContent(page);
+      if (font.wide) await forceWideFont(page);
+      await page.goto("/");
+      if (font.wide) await expectWideFont(page);
+      await page.getByText("Low-data mode").click();
 
-    const widths = Array.from({ length: 71 }, (_, i) => 320 + i * 4);
-    const area = page.getByTestId("result-area");
-    // A fixed-height row hides wrapped or spilled text from the height check, so the consent
-    // card's buttons and status are also checked to stay one line, inside the card.
-    const card = page.locator('section[aria-labelledby="consent-heading"]');
-    const spills = () =>
-      card.evaluate((section) => {
-        const box = section.getBoundingClientRect();
-        return [...section.querySelectorAll("button, [aria-live]")]
-          .filter((el) => {
-            const rect = el.getBoundingClientRect();
-            return rect.right > box.right || el.scrollWidth > el.clientWidth + 1;
-          })
-          .map((el) => el.textContent);
+      const widths = Array.from({ length: 71 }, (_, i) => 320 + i * 4);
+      const area = page.getByTestId("result-area");
+      const heights = async () => {
+        const result: number[] = [];
+        for (const width of widths) {
+          await page.setViewportSize({ width, height: 900 });
+          result.push(await area.evaluate((el) => el.getBoundingClientRect().height));
+          expect(await overflows(page), `at ${String(width)} px`).toEqual([]);
+        }
+        await page.setViewportSize({ width: 412, height: 900 });
+        return result;
+      };
+
+      const placeholder = await heights();
+      await startButton(page).click();
+      await expect(page.getByText("Your net don finish test!")).toBeVisible({
+        timeout: RUN_TIMEOUT,
       });
-    const heights = async () => {
-      const result: number[] = [];
-      for (const width of widths) {
-        await page.setViewportSize({ width, height: 900 });
-        result.push(await area.evaluate((el) => el.getBoundingClientRect().height));
-        expect(await spills(), `at ${String(width)} px`).toEqual([]);
-      }
-      await page.setViewportSize({ width: 412, height: 900 });
-      return result;
-    };
+      await expect(stat(page, "Loaded latency")).toContainText("grade F");
+      await expect(page.getByText(/Ended early to save data/)).toBeVisible();
+      await expect(page.getByTestId("network-note")).toContainText("Tizeti/Wifi.ng");
+      await expect(page.getByTestId("connection-hint")).toContainText("MiFi");
+      expect(await heights()).toEqual(placeholder);
 
-    const placeholder = await heights();
-    await startButton(page).click();
-    await expect(page.getByText("Your net don finish test!")).toBeVisible({ timeout: RUN_TIMEOUT });
-    await expect(stat(page, "Latency under load")).toContainText("grade F");
-    await expect(page.getByText(/Ended early to save data/)).toBeVisible();
-    await expect(page.getByTestId("network-note")).toContainText("Tizeti/Wifi.ng");
-    await expect(page.getByTestId("connection-hint")).toContainText("MiFi");
-    expect(await heights()).toEqual(placeholder);
-
-    await page.getByRole("button", { name: "Share", exact: true }).click();
-    expect(await heights()).toEqual(placeholder);
-    await page.waitForTimeout(700);
-    await page.getByRole("button", { name: "Stop sharing" }).click();
-    expect(await heights()).toEqual(placeholder);
+      await page.getByRole("button", { name: "Share", exact: true }).click();
+      expect(await heights()).toEqual(placeholder);
+      await page.waitForTimeout(700);
+      await page.getByRole("button", { name: "Stop sharing" }).click();
+      expect(await heights()).toEqual(placeholder);
+    });
   });
-});
+}

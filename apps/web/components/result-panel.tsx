@@ -92,7 +92,7 @@ export function ResultPanel({ result, shown }: Props) {
           <Stat label="Latency" value={formatMs(result.latency.idleMedianMs)} detail="idle" />
           <Stat label="Jitter" value={formatMs(result.latency.jitterMs)} />
           <Stat
-            label="Latency under load"
+            label="Loaded latency"
             value={`+${formatMs(result.addedLatencyMs)}`}
             detail={`grade ${grade}`}
           />
