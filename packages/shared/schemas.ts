@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { ISP_SLUGS } from "./isps";
 import { NETWORK_TYPES } from "./network-types";
+import { SHARING } from "./sharing";
 import { STATE_SLUGS } from "./states";
 
 const SLUG_PATTERN = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
@@ -56,3 +57,39 @@ export const SpeedTestResultSchema = z.object({
   deviceClass: DeviceClassSchema,
 });
 export type SpeedTestResult = z.infer<typeof SpeedTestResultSchema>;
+
+/** A shared result's own secret: 32 random bytes, base64url without padding. */
+export const ResultSecretSchema = z.string().regex(/^[A-Za-z0-9_-]{43}$/);
+
+export const TokenRequestSchema = z.strictObject({ lowData: z.boolean() });
+
+export const SubmitResultSchema = z.strictObject({
+  token: z.string().min(1).max(512),
+  secret: ResultSecretSchema,
+  result: SpeedTestResultSchema,
+});
+export type SubmitResult = z.infer<typeof SubmitResultSchema>;
+
+/** Network details the owner may correct shortly after sharing. null clears the state. */
+export const CorrectResultSchema = z
+  .strictObject({
+    secret: ResultSecretSchema,
+    ispSlug: IspSlugSchema.optional(),
+    stateSlug: NigerianStateSchema.nullable().optional(),
+    networkType: NetworkTypeSchema.optional(),
+  })
+  .refine(
+    (body) =>
+      body.ispSlug !== undefined || body.stateSlug !== undefined || body.networkType !== undefined,
+    { message: "Nothing to correct" },
+  );
+export type CorrectResult = z.infer<typeof CorrectResultSchema>;
+
+export const DeleteResultsSchema = z.strictObject({
+  secrets: z.array(ResultSecretSchema).min(1).max(SHARING.deleteBatch),
+});
+
+/** One published group. Below the minimum size it carries no numbers at all, not even a count. */
+export type StatsCell =
+  | { key: string; enough: false }
+  | { key: string; enough: true; downloadMbps: number; uploadMbps: number; latencyMs: number };

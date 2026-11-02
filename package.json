@@ -31,6 +31,7 @@
     "format:check": "prettier --check .",
     "licenses": "bun scripts/check-licenses.ts",
     "tripwire": "bun scripts/tripwire.ts",
+    "load-test": "bun scripts/load-test.ts",
     "prepare": "husky"
   },
   "lint-staged": {

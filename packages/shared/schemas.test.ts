@@ -1,12 +1,17 @@
 import { describe, expect, it } from "vitest";
 import { NETWORK_TYPES } from "./network-types";
 import {
+  CorrectResultSchema,
+  DeleteResultsSchema,
   IspSchema,
   NetworkTypeSchema,
   NigerianStateSchema,
+  ResultSecretSchema,
   SpeedTestResultSchema,
   type SpeedTestResult,
+  SubmitResultSchema,
 } from "./schemas";
+import { SHARING } from "./sharing";
 
 const validResult: SpeedTestResult = {
   downloadMbps: 42.5,
@@ -86,5 +91,52 @@ describe("NetworkTypeSchema", () => {
   it("accepts exactly the zod-free NETWORK_TYPES list", () => {
     expect(NetworkTypeSchema.options).toEqual([...NETWORK_TYPES]);
     expect(NetworkTypeSchema.options).toHaveLength(8);
+  });
+});
+
+const SECRET = "a".repeat(43);
+
+describe("ResultSecretSchema", () => {
+  it("takes exactly 43 base64url characters (32 bytes, no padding)", () => {
+    expect(ResultSecretSchema.safeParse("Az09_-".padEnd(43, "x")).success).toBe(true);
+    expect(ResultSecretSchema.safeParse("a".repeat(42)).success).toBe(false);
+    expect(ResultSecretSchema.safeParse("a".repeat(44)).success).toBe(false);
+    expect(ResultSecretSchema.safeParse(`${"a".repeat(42)}=`).success).toBe(false);
+    expect(ResultSecretSchema.safeParse(`${"a".repeat(42)}+`).success).toBe(false);
+  });
+});
+
+describe("SubmitResultSchema", () => {
+  it("accepts a token, a secret and a result, and nothing else", () => {
+    const body = { token: "v1.x.y", secret: SECRET, result: validResult };
+    expect(SubmitResultSchema.safeParse(body).success).toBe(true);
+    expect(SubmitResultSchema.safeParse({ ...body, ip: "1.2.3.4" }).success).toBe(false);
+    expect(SubmitResultSchema.safeParse({ ...body, token: "" }).success).toBe(false);
+  });
+});
+
+describe("CorrectResultSchema", () => {
+  it("needs something to correct, and lets the state be cleared", () => {
+    expect(CorrectResultSchema.safeParse({ secret: SECRET }).success).toBe(false);
+    expect(CorrectResultSchema.safeParse({ secret: SECRET, stateSlug: null }).success).toBe(true);
+    expect(CorrectResultSchema.safeParse({ secret: SECRET, ispSlug: "glo" }).success).toBe(true);
+    expect(CorrectResultSchema.safeParse({ secret: SECRET, ispSlug: "nope" }).success).toBe(false);
+    expect(
+      CorrectResultSchema.safeParse({ secret: SECRET, networkType: "4g", downloadMbps: 1 }).success,
+    ).toBe(false);
+  });
+});
+
+describe("DeleteResultsSchema", () => {
+  it("takes one to a batch of secrets", () => {
+    const secrets = (n: number) => Array.from({ length: n }, () => SECRET);
+    expect(DeleteResultsSchema.safeParse({ secrets: secrets(0) }).success).toBe(false);
+    expect(DeleteResultsSchema.safeParse({ secrets: secrets(1) }).success).toBe(true);
+    expect(DeleteResultsSchema.safeParse({ secrets: secrets(SHARING.deleteBatch) }).success).toBe(
+      true,
+    );
+    expect(
+      DeleteResultsSchema.safeParse({ secrets: secrets(SHARING.deleteBatch + 1) }).success,
+    ).toBe(false);
   });
 });

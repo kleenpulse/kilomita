@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { hashIpPrefix, ipPrefix, memorySaltStore } from "./ip-hash";
+import { hashIpPrefix, ipPrefix, kvSaltStore, memorySaltStore, nextUtcMidnight } from "./ip-hash";
+import { type Kv, memoryKv } from "./kv";
 
 const salt = (byte: number) => new Uint8Array(32).fill(byte);
 const DAY = 86_400_000;
@@ -97,5 +98,43 @@ describe("memorySaltStore", () => {
     const monday = hashIpPrefix("102.88.85.10", await store.saltForToday());
     now += DAY;
     expect(hashIpPrefix("102.88.85.10", await store.saltForToday())).not.toBe(monday);
+  });
+});
+
+describe("kvSaltStore", () => {
+  it("expires the salt at exactly the next UTC midnight, not a TTL from creation", async () => {
+    const expiries: number[] = [];
+    const inner = memoryKv(() => NOON);
+    const kv: Kv = {
+      ...inner,
+      setIfAbsent: (key, value, expiresAtMs) => {
+        expiries.push(expiresAtMs);
+        return inner.setIfAbsent(key, value, expiresAtMs);
+      },
+    };
+    await kvSaltStore(kv, () => NOON).saltForToday();
+    expect(expiries).toEqual([Date.UTC(2026, 10, 3)]);
+    expect(nextUtcMidnight(Date.UTC(2026, 10, 2, 23, 59, 59, 999))).toBe(Date.UTC(2026, 10, 3));
+    expect(nextUtcMidnight(Date.UTC(2026, 10, 3))).toBe(Date.UTC(2026, 10, 4));
+    expect(nextUtcMidnight(Date.UTC(2026, 11, 31, 12))).toBe(Date.UTC(2027, 0, 1));
+  });
+
+  it("gives every caller the same salt for the day, and a new one the next day", async () => {
+    let time = NOON;
+    const kv = memoryKv(() => time);
+    const a = await kvSaltStore(kv, () => time).saltForToday();
+    const b = await kvSaltStore(kv, () => time).saltForToday();
+    expect(b).toEqual(a);
+    expect(a.byteLength).toBe(32);
+    time = NOON + DAY;
+    expect(await kvSaltStore(kv, () => time).saltForToday()).not.toEqual(a);
+  });
+
+  it("is gone from the store once the day ends", async () => {
+    let time = NOON;
+    const kv = memoryKv(() => time);
+    await kvSaltStore(kv, () => time).saltForToday();
+    time = Date.UTC(2026, 10, 3);
+    expect(await kv.get("salt:2026-11-02")).toBeNull();
   });
 });

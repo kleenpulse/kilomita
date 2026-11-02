@@ -1,4 +1,5 @@
-import { gradeBufferbloat, runIdleLatency } from "./latency";
+import { gradeBufferbloat } from "./grade";
+import { runIdleLatency } from "./latency";
 import {
   DOWNLOAD_SHARE,
   LOW_DATA_PROFILE,
@@ -17,7 +18,7 @@ import type {
   SpeedTestOutcome,
 } from "./types";
 
-export const ENGINE_VERSION = "0.2.0";
+export const ENGINE_VERSION = "0.3.0";
 
 const MIN_MAX_BYTES = 1_000_000;
 const MIN_MAX_DURATION_MS = 10_000;

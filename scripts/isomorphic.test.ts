@@ -158,7 +158,7 @@ describe("@kilomita/shared ./lists guard", { timeout: 60_000 }, () => {
   }
 
   // The zod ban must not replace the Node ban: both rules fire on the same file.
-  it.each(["lists.ts", "isps.ts", "states.ts", "network-types.ts"])(
+  it.each(["lists.ts", "isps.ts", "states.ts", "network-types.ts", "sharing.ts"])(
     "keeps %s free of Node and zod",
     async (file) => {
       expect(await flagged(file)).toEqual([

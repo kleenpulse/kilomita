@@ -6,7 +6,7 @@ export default [
     // The `./lists` subpath reaches client bundles, so its files must stay zod-free. This is the
     // typescript-eslint rule on purpose: a core `no-restricted-imports` here would replace the
     // preset's Node bans for these files.
-    files: ["isps.ts", "states.ts", "network-types.ts", "lists.ts"],
+    files: ["isps.ts", "states.ts", "network-types.ts", "sharing.ts", "lists.ts"],
     rules: {
       "@typescript-eslint/no-restricted-imports": [
         "error",

@@ -1,6 +1,7 @@
 import { createHmac, randomBytes } from "node:crypto";
 import { isIP } from "node:net";
 import { expandIpv6, normaliseIp } from "./ip-address";
+import type { Kv } from "./kv";
 
 /*
  * The hashed IP prefix stored with a shared result (Phase 4). An IPv4 /24 is usually shared by
@@ -9,8 +10,9 @@ import { expandIpv6, normaliseIp } from "./ip-address";
  *
  * The salt is random per UTC day. Nothing derives it, so once a day's salt is gone its hashes
  * can't be brute-forced back to a prefix (there are only 2^24 IPv4 /24s) or linked to another
- * day's. The production store must delete it when the day ends; memorySaltStore only replaces it
- * on the first use of a new day.
+ * day's. kvSaltStore's key expires at the next UTC midnight, so Redis deletes it when the day
+ * ends (a 48 h TTL would not: the consent copy promises it can't be traced back after a day).
+ * memorySaltStore only replaces it on the first use of a new day.
  */
 
 const SALT_BYTES = 32;
@@ -47,6 +49,33 @@ export function memorySaltStore(now: () => number = Date.now): SaltStore {
       const day = utcDay(now());
       if (current?.day !== day) current = { day, salt: new Uint8Array(randomBytes(SALT_BYTES)) };
       return Promise.resolve(current.salt);
+    },
+  };
+}
+
+export function nextUtcMidnight(ms: number): number {
+  const date = new Date(ms);
+  return Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate() + 1);
+}
+
+/** Today's salt in the shared store, so every server process hashes alike. */
+export function kvSaltStore(kv: Kv, now: () => number = Date.now): SaltStore {
+  return {
+    async saltForToday() {
+      // Twice at most: the key can expire between the two calls if they straddle midnight.
+      for (let attempt = 0; attempt < 2; attempt++) {
+        const time = now();
+        const key = `salt:${utcDay(time)}`;
+        const fresh = Buffer.from(randomBytes(SALT_BYTES)).toString("base64");
+        // Whoever sets it first wins; everyone then reads the winner's salt.
+        await kv.setIfAbsent(key, fresh, nextUtcMidnight(time));
+        const stored = await kv.get(key);
+        if (stored === null) continue;
+        const salt = new Uint8Array(Buffer.from(stored, "base64"));
+        if (salt.byteLength !== SALT_BYTES) throw new RangeError("The stored salt is malformed");
+        return salt;
+      }
+      throw new Error("The salt store returned nothing");
     },
   };
 }

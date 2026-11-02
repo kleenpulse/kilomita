@@ -1,2 +1,5 @@
 [install]
 linker = "isolated"
+# Only install releases at least 7 days old (seconds): fresh publishes are where hijacked
+# packages land first.
+minimumReleaseAge = 604800

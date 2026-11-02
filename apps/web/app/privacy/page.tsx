@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { APP_NAME, SOURCE_URL } from "@kilomita/shared";
+import { APP_NAME, SHARING, SOURCE_URL } from "@kilomita/shared";
+import { DeleteShared } from "@/components/delete-shared";
 
 export const metadata: Metadata = {
   title: "Privacy",
@@ -16,9 +17,7 @@ export default function PrivacyPage() {
         </Link>
         <h1 className="mt-4 text-3xl font-bold tracking-tight">Privacy</h1>
         <p className="mt-1 text-sm text-neutral-600 dark:text-neutral-400">
-          This page describes the current version of {APP_NAME}. A full privacy policy, with how
-          long shared results are kept and how to delete them, will be published before results are
-          stored.
+          This page describes the current version of {APP_NAME}.
         </p>
       </header>
 
@@ -41,20 +40,35 @@ export default function PrivacyPage() {
         <section>
           <h2 className="text-lg font-semibold">What is stored</h2>
           <p className="mt-1">
-            Nothing from your test is stored on our servers in this version. Your browser keeps two
-            choices on your device: whether low-data mode is on, and whether you agreed to share
-            results.
+            Nothing from your test is stored on our servers unless you choose to share. Your browser
+            keeps your choices on your device: whether low-data mode is on, whether you agreed to
+            share results, and, for each result you share, a random secret that lets you delete it
+            later.
+          </p>
+          <p className="mt-2">
+            Before each test our server gives your browser a one-time test pass. It says nothing
+            about you; it only proves that a shared result came from a real test.
           </p>
         </section>
 
         <section>
           <h2 className="text-lg font-semibold">If you choose to share</h2>
           <p className="mt-1">
-            Sharing is off until you say yes. If you agree, we will keep the result on screen and
-            later ones: the speeds, your network, state and connection type. We will not store your
-            IP address. We keep only a scrambled code made from the first part of it (the first
-            three numbers of an IPv4 address, or the first three groups of an IPv6 address). The
-            code is made with a random key that changes every day and is deleted when the day ends.
+            Sharing is off until you say yes. Once you agree, the result on screen and later ones
+            are shared after you pick your network: the speeds, latency, jitter, data used, test
+            length, when the test ran, your network, state and connection type, and whether the
+            device is a phone, tablet or computer. We never store your IP address.
+          </p>
+          <p className="mt-2">
+            The results are kept in a database run by Neon, and short-lived counters in a store run
+            by Upstash. Both are hosted by Amazon Web Services in Frankfurt, Germany, so shared
+            results leave Nigeria.
+          </p>
+          <p className="mt-2">
+            When our hosting tells us your IP address, we also keep a scrambled code made from the
+            first part of it (the first three numbers of an IPv4 address, or the first three groups
+            of an IPv6 address). The code is made with a random key that changes every day and is
+            deleted when the day ends, and the code itself is wiped after about 48 hours.
           </p>
           <p className="mt-2">
             The first part of an IPv4 address is shared by up to 256 addresses, often by many
@@ -64,9 +78,20 @@ export default function PrivacyPage() {
             can&apos;t be traced back to an address or linked to codes from other days.
           </p>
           <p className="mt-2">
-            You can change your mind at any time with the &ldquo;Stop sharing&rdquo; button below
-            your result. Stopping applies to future results.
+            Shared results are deleted after 12 months. We publish only medians of groups of at
+            least {SHARING.minGroupSize} results, never a single result.
           </p>
+        </section>
+
+        <section id="delete" className="scroll-mt-6">
+          <h2 className="text-lg font-semibold">Stop sharing, or delete what you shared</h2>
+          <p className="mt-1">
+            The &ldquo;Stop sharing&rdquo; button below your result stops future sharing. To remove
+            results already shared, delete them here. This works from the browser you shared them
+            from: it holds the only proof that they are yours. If you clear this site&apos;s data,
+            we can no longer tell which results were yours, and they are deleted after 12 months.
+          </p>
+          <DeleteShared />
         </section>
 
         <section>

@@ -1,5 +1,6 @@
 import { useRef } from "react";
 import type { Consent, ConsentChoice } from "@/lib/consent";
+import { SHARE_TEXT, type ShareStatus } from "@/lib/share";
 
 const STATUS: Record<Consent, string> = {
   unasked: "Nothing is shared until you choose.",
@@ -17,10 +18,13 @@ const SECONDARY = `${BUTTON} border border-neutral-300 hover:bg-neutral-100 dark
 
 interface Props {
   consent: Consent;
+  /** What is happening to the result on screen; null shows the consent status instead. */
+  shareStatus: ShareStatus | null;
   onChoose: (choice: ConsentChoice) => void;
 }
 
-export function ConsentCard({ consent, onChoose }: Props) {
+export function ConsentCard({ consent, shareStatus, onChoose }: Props) {
+  const text = shareStatus === null ? STATUS[consent] : SHARE_TEXT[shareStatus];
   const status = useRef<HTMLParagraphElement>(null);
   const changedAt = useRef(Number.NEGATIVE_INFINITY);
 
@@ -55,7 +59,7 @@ export function ConsentCard({ consent, onChoose }: Props) {
         data-testid="consent-status"
         className="mt-3 h-10 text-sm font-semibold focus:outline-none"
       >
-        <span key={consent}>{STATUS[consent]}</span>
+        <span key={text}>{text}</span>
       </p>
       <div className="mt-2 flex h-11 gap-3">
         {consent === "granted" ? (
@@ -92,10 +96,10 @@ export function ConsentCard({ consent, onChoose }: Props) {
         ) : null}
       </div>
       <a
-        href="/privacy"
+        href="/privacy#delete"
         className="mt-3 inline-block text-sm underline underline-offset-2 hover:text-neutral-700 dark:hover:text-neutral-300"
       >
-        How we handle data
+        How we handle data, or delete it
       </a>
     </section>
   );

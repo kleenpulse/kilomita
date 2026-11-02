@@ -12,16 +12,23 @@
     "typecheck": "next typegen && tsc --noEmit",
     "test": "vitest run",
     "test:e2e": "playwright test",
+    "db:generate": "drizzle-kit generate",
+    "db:migrate": "bun server/db/migrate.ts",
+    "db:purge": "bun server/db/migrate.ts --purge-only",
     "playwright:install": "playwright install --with-deps chromium"
   },
   "dependencies": {
     "@kilomita/engine": "workspace:*",
     "@kilomita/shared": "workspace:*",
+    "@upstash/redis": "1.40.0",
+    "drizzle-orm": "0.45.4",
     "next": "^16.4.3",
+    "postgres": "3.4.9",
     "react": "^19.3.1",
     "react-dom": "^19.3.1"
   },
   "devDependencies": {
+    "@electric-sql/pglite": "0.5.11",
     "@kilomita/eslint-config": "workspace:*",
     "@kilomita/typescript-config": "workspace:*",
     "@playwright/test": "^1.64.1",
@@ -29,6 +36,7 @@
     "@types/node": "^24",
     "@types/react": "^19.3.0",
     "@types/react-dom": "^19.3.0",
+    "drizzle-kit": "0.31.11",
     "eslint": "^10.14.0",
     "jiti": "^2.7.0",
     "tailwindcss": "^4.3.3",

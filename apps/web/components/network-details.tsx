@@ -1,14 +1,9 @@
-import type { IspSlug, NetworkTypeSlug, NigerianStateSlug } from "@kilomita/shared";
+import type { NetworkTypeSlug } from "@kilomita/shared";
 import { ISPS, NETWORK_TYPES, NIGERIAN_STATES } from "@kilomita/shared/lists";
 import { CONNECTION_HINT, type ConnectionKind } from "@/lib/connection-hint";
 import type { Detection } from "@/lib/detection";
 import { networkNote } from "@/lib/network-note";
-
-export interface NetworkSelection {
-  isp: IspSlug | null;
-  state: NigerianStateSlug | null;
-  type: NetworkTypeSlug;
-}
+import type { NetworkSelection } from "@/lib/share";
 
 const TYPE_LABEL: Record<NetworkTypeSlug, string> = {
   unknown: "Not sure",

@@ -30,6 +30,8 @@ test("links to the privacy page and back", async ({ page }) => {
   await expect(page.getByText(/receives your IP address with every request/)).toBeVisible();
   // An IPv6 /48 can be one home or office: the page must not claim the code never identifies.
   await expect(page.getByText(/can belong to a single home or office/)).toBeVisible();
+  // The NDPA notice lists everything a shared result keeps, its time included.
+  await expect(page.getByText(/when the test ran/)).toBeVisible();
   await expect(page.getByText(/never identifies/)).toHaveCount(0);
   await page.getByRole("link", { name: "← Back to the test" }).click();
   await expect(page.getByRole("button", { name: "Start" })).toBeVisible();

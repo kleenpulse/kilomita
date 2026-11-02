@@ -28,7 +28,16 @@
     "dev": {
       "cache": false,
       "persistent": true,
-      "env": ["PORT", "NEXT_PUBLIC_SITE_URL", "CLIENT_IP_HEADER"]
+      "env": [
+        "PORT",
+        "NEXT_PUBLIC_SITE_URL",
+        "CLIENT_IP_HEADER",
+        "DATABASE_URL",
+        "UPSTASH_REDIS_REST_URL",
+        "UPSTASH_REDIS_REST_TOKEN",
+        "RESULT_TOKEN_SECRET",
+        "KILOMITA_STORES"
+      ]
     }
   }
 }

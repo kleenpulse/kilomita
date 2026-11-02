@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { gradeBufferbloat, probe, runIdleLatency } from "./latency";
+import { gradeBufferbloat } from "./grade";
+import { probe, runIdleLatency } from "./latency";
 import { EngineFailure } from "./runtime";
 import { blockRealNetwork, createSimulatedNetwork, testContext } from "./simulated-network";
 import type { FetchFn } from "./types";

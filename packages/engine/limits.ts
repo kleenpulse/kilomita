@@ -1,6 +1,9 @@
 // Kept apart from the engine's index so a page can show the caps without bundling the engine.
 import { LOW_DATA_PROFILE, type Profile, STANDARD_PROFILE } from "./profiles";
 
+export { type EnvelopeMiss, PLAUSIBILITY, outsideEnvelope } from "./envelope";
+export { gradeBufferbloat } from "./grade";
+
 export interface TestLimits {
   /** Hard data cap per test, in decimal bytes. */
   readonly maxBytes: number;
