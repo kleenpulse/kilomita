@@ -1,5 +1,6 @@
-import { APP_NAME, SOURCE_URL, TAGLINE } from "@kilomita/shared";
+import { APP_NAME, TAGLINE } from "@kilomita/shared";
 import { SpeedTest } from "@/components/speed-test";
+import { SiteFooter } from "./_components/site-footer";
 
 export default function HomePage() {
   return (
@@ -13,22 +14,7 @@ export default function HomePage() {
         <SpeedTest />
       </main>
 
-      <footer className="py-6 text-center text-xs text-neutral-600 dark:text-neutral-400">
-        {APP_NAME} is free software (AGPL-3.0) ·{" "}
-        <a
-          href={SOURCE_URL}
-          className="underline underline-offset-2 hover:text-neutral-800 dark:hover:text-neutral-200"
-        >
-          Source code
-        </a>{" "}
-        ·{" "}
-        <a
-          href="/privacy"
-          className="underline underline-offset-2 hover:text-neutral-800 dark:hover:text-neutral-200"
-        >
-          Privacy
-        </a>
-      </footer>
+      <SiteFooter />
     </div>
   );
 }

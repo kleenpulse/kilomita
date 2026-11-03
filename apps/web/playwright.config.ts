@@ -32,6 +32,8 @@ export default defineConfig({
       // Shared results go to PGlite and an in-memory Redis twin in the server process: e2e never
       // reaches Neon or Upstash. A throwaway signing key per run, so no secret is committed.
       KILOMITA_STORES: "memory",
+      // Synthetic demo results (memory mode only), so the insight pages have every case to show.
+      KILOMITA_SEED: "demo",
       RESULT_TOKEN_SECRET: randomBytes(32).toString("base64"),
     },
   },

@@ -1,4 +1,4 @@
-import { type Page, expect } from "@playwright/test";
+import { type Locator, type Page, expect } from "@playwright/test";
 import { type MockOptions, type MockStats, mockSpeedEndpoint } from "./mock-endpoint";
 
 // A mocked run lasts at most the engine's deadline: 30 s standard, 15 s low-data.
@@ -167,15 +167,19 @@ export async function expectWideFont(page: Page): Promise<void> {
 }
 
 /**
- * Everything in the result area that overflows its own box, sideways or downwards. A fixed-height
- * box hides wrapped or spilled text from a height check, so this catches what heights can't.
+ * Everything in an area (the result area by default) that overflows its own box, sideways or
+ * downwards, or crosses the area's edges. A fixed-height box hides wrapped or spilled text from a
+ * height check, so this catches what heights can't.
  * Selects clip long names on purpose; sr-only text is a 1 px clipped box by design. Hidden
  * reveals sit 4 px lower (translate) and slide up when shown; a transform never moves layout but
  * does stretch scrollHeight, so transforms are switched off while measuring. If anything in the
  * result area is ever positioned with a transform, this measures it untransformed: revisit.
  */
-export async function overflows(page: Page): Promise<string[]> {
-  return page.getByTestId("result-area").evaluate((area) => {
+export async function overflows(
+  page: Page,
+  area: Locator = page.getByTestId("result-area"),
+): Promise<string[]> {
+  return area.evaluate((area) => {
     const still = new CSSStyleSheet();
     still.replaceSync(
       "* { translate: none !important; transform: none !important; transition: none !important; }",

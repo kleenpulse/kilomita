@@ -20,7 +20,7 @@ export async function testStores(now: () => number): Promise<Stores> {
   const db = await database;
   await db.delete(results);
   const kv = memoryKv(now);
-  return { db, kv, salt: kvSaltStore(kv, now), memory: false };
+  return { db, kv, salt: kvSaltStore(kv, now), memory: false, seeded: false };
 }
 
 export const TEST_KEY = tokenKey(randomBytes(32).toString("base64")) ?? new Uint8Array();

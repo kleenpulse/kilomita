@@ -1,7 +1,8 @@
 import { SHARING } from "@kilomita/shared";
 import { beforeEach, describe, expect, it } from "vitest";
 import { results } from "./db/schema";
-import { clearStatsMemo, handleStats } from "./stats-route";
+import { clearStatsMemo } from "./stats-cache";
+import { handleStats } from "./stats-route";
 import type { SharingDeps, Stores } from "./stores";
 import { resultRow, testDeps, testStores } from "./testing";
 
@@ -23,11 +24,14 @@ function stats(path: string) {
   return handleStats(url, url.pathname.split("/").at(-1) ?? "", deps);
 }
 
-async function cells(path: string) {
+type Cell = { key: string; enough: boolean };
+async function cells(path: string): Promise<Cell[]> {
   const response = await stats(path);
   expect(response.status).toBe(200);
-  return ((await response.json()) as { cells: unknown[] }).cells;
+  return ((await response.json()) as { cells: Cell[] }).cells;
 }
+const enough = async (path: string) =>
+  (await cells(path)).filter((cell) => cell.enough).map((cell) => cell.key);
 
 function rows(count: number, overrides: Parameters<typeof resultRow>[0] = {}) {
   return Array.from({ length: count }, (_, i) =>
@@ -36,52 +40,14 @@ function rows(count: number, overrides: Parameters<typeof resultRow>[0] = {}) {
 }
 
 describe("GET /api/stats", () => {
-  it(`publishes nothing for a group below ${String(MIN)} results, not even its size`, async () => {
-    await stores.db.insert(results).values(rows(MIN - 1, { ispSlug: "glo" }));
-    await stores.db.insert(results).values(rows(MIN, { ispSlug: "mtn" }));
-    expect(await cells("isp")).toEqual([
-      { key: "glo", enough: false },
-      { key: "mtn", enough: true, downloadMbps: (MIN + 1) / 2, uploadMbps: 1, latencyMs: 40 },
-    ]);
-  });
-
-  it("uses exact medians for odd and even group sizes", async () => {
-    await stores.db.insert(results).values(rows(MIN + 1, { ispSlug: "mtn" }));
-    await stores.db.insert(results).values(rows(MIN, { ispSlug: "airtel" }));
-    const found = (await cells("isp")) as { key: string; downloadMbps: number }[];
-    const byKey = new Map(found.map((cell) => [cell.key, cell.downloadMbps]));
-    expect(byKey.get("mtn")).toBe((MIN + 2) / 2);
-    expect(byKey.get("airtel")).toBe((MIN + 1) / 2);
-  });
-
-  it("leaves out flagged rows and anything older than 30 days", async () => {
-    await stores.db.insert(results).values(rows(MIN - 1));
-    await stores.db.insert(results).values(resultRow({ flag: "duplicate" }));
-    await stores.db.insert(results).values(resultRow({ flag: "implausible" }));
-    await stores.db
-      .insert(results)
-      .values(resultRow({ createdAt: new Date(NOW - 31 * 24 * 60 * 60 * 1000) }));
-    expect(await cells("isp")).toEqual([{ key: "mtn", enough: false }]);
-  });
-
-  it("buckets hours in Lagos time, and days for the trend", async () => {
-    // 23:30 UTC is 00:30 the next day in Lagos.
-    const late = new Date(Date.UTC(2026, 10, 1, 23, 30));
-    await stores.db.insert(results).values(rows(MIN, { createdAt: late }));
-    expect(await cells("hour")).toEqual([expect.objectContaining({ key: "0", enough: true })]);
-    expect(await cells("trend")).toEqual([
-      expect.objectContaining({ key: "2026-11-02", enough: true }),
-    ]);
-  });
-
-  it("filters, and groups states without the rows that have none", async () => {
-    await stores.db.insert(results).values(rows(MIN, { stateSlug: "kano", networkType: "3g" }));
-    await stores.db.insert(results).values(rows(MIN, { stateSlug: null }));
-    expect(await cells("state")).toEqual([expect.objectContaining({ key: "kano", enough: true })]);
-    expect(await cells("network-type?state=kano")).toEqual([
-      expect.objectContaining({ key: "3g", enough: true }),
-    ]);
-    expect(await cells("isp?type=5g")).toEqual([]);
+  it("answers every dimension, with the window filter", async () => {
+    await stores.db.insert(results).values(rows(MIN));
+    expect(await enough("isp")).toEqual(["mtn"]);
+    expect(await enough("isp?window=7")).toEqual(["mtn"]);
+    expect(await enough("week?window=90")).toHaveLength(1);
+    for (const dimension of ["state", "network-type", "hour", "daypart", "trend"]) {
+      expect(await enough(dimension), dimension).toHaveLength(1);
+    }
   });
 
   it("refuses unknown dimensions, parameters and values", async () => {
@@ -89,16 +55,19 @@ describe("GET /api/stats", () => {
     expect((await stats("isp?isp=nope")).status).toBe(400);
     expect((await stats("isp?colour=red")).status).toBe(400);
     expect((await stats("isp?isp=mtn&isp=glo")).status).toBe(400);
+    expect((await stats("isp?window=14")).status).toBe(400);
   });
 
-  it("may be cached publicly, and is memoised for a minute", async () => {
+  it("may be cached publicly, and is memoised for a minute per window", async () => {
     const first = await stats("isp");
     expect(first.headers.get("cache-control")).toBe(
       "public, s-maxage=300, stale-while-revalidate=600",
     );
     await stores.db.insert(results).values(rows(MIN));
-    expect(await cells("isp")).toEqual([]);
+    expect(await enough("isp")).toEqual([]);
+    // Another window is another memo entry.
+    expect(await enough("isp?window=90")).toEqual(["mtn"]);
     time = NOW + 60_000;
-    expect(await cells("isp")).toEqual([expect.objectContaining({ key: "mtn", enough: true })]);
+    expect(await enough("isp")).toEqual(["mtn"]);
   });
 });

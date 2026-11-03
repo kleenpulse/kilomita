@@ -1,25 +1,9 @@
-import type { NetworkTypeSlug } from "@kilomita/shared";
 import { ISPS, NETWORK_TYPES, NIGERIAN_STATES } from "@kilomita/shared/lists";
 import { CONNECTION_HINT, type ConnectionKind } from "@/lib/connection-hint";
 import type { Detection } from "@/lib/detection";
+import { TYPE_LABEL, TYPE_ORDER } from "@/lib/network-labels";
 import { networkNote } from "@/lib/network-note";
 import type { NetworkSelection } from "@/lib/share";
-
-const TYPE_LABEL: Record<NetworkTypeSlug, string> = {
-  unknown: "Not sure",
-  "2g": "2G",
-  "3g": "3G",
-  "4g": "4G",
-  "5g": "5G",
-  fiber: "Fibre",
-  "fixed-wireless": "Fixed wireless",
-  satellite: "Satellite",
-};
-
-const TYPE_ORDER: readonly NetworkTypeSlug[] = [
-  "unknown",
-  ...NETWORK_TYPES.filter((type) => type !== "unknown"),
-];
 
 const SELECT =
   "h-11 w-full min-w-0 truncate rounded-lg border border-neutral-300 bg-white px-2 text-base text-neutral-900 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald-600 dark:border-neutral-700 dark:bg-neutral-900 dark:text-neutral-100";

@@ -1,7 +1,22 @@
 import { next } from "@kilomita/eslint-config/next";
 
+const MESSAGE = "Server-only code: import it from server/ or app/api/ only.";
+// Regexes, so a relative path is caught at any depth. Not "server" anywhere: next/server is fine.
+const SERVER_ALIAS = "^@/server(/|$)";
+const SERVER_ALIAS_EXCEPT_INSIGHTS = "^@/server(/(?!insights$).*)?$";
+const serverBan = (alias: string) =>
+  [alias, "^\\./server(/|$)", "^(\\.\\./)+server(/|$)"].map((regex) => ({
+    regex,
+    message: MESSAGE,
+  }));
+
 const config = [
   ...next(import.meta.dirname),
+  {
+    // Plain links on purpose: next/link adds a client chunk to otherwise static pages
+    // (CLAUDE.md, "Bundle"). The dashboard pages ship no JS of their own.
+    rules: { "@next/next/no-html-link-for-pages": "off" },
+  },
   {
     // Client-reachable code takes only types from the engine and shared. The engine itself runs in
     // the Worker (its caps come from `@kilomita/engine/limits`), and shared's values pull in zod.
@@ -35,20 +50,15 @@ const config = [
     files: ["**/*.{ts,tsx}"],
     ignores: ["server/**", "app/api/**", "**/*.test.ts"],
     rules: {
-      "no-restricted-imports": [
-        "error",
-        {
-          patterns: [
-            {
-              // Not "**/server": that would also catch next/server.
-              group: ["@/server", "@/server/*", "./server", "./server/*"].concat(
-                ["../", "../../", "../../../"].flatMap((up) => [`${up}server`, `${up}server/*`]),
-              ),
-              message: "Server-only code: import it from server/ or app/api/ only.",
-            },
-          ],
-        },
-      ],
+      "no-restricted-imports": ["error", { patterns: serverBan(SERVER_ALIAS) }],
+    },
+  },
+  {
+    // The insight pages are server components that read stats through one facade. A files-scoped
+    // rule replaces the block above for these files, so the whole ban is restated here.
+    files: ["app/\\(insights\\)/**/page.tsx"],
+    rules: {
+      "no-restricted-imports": ["error", { patterns: serverBan(SERVER_ALIAS_EXCEPT_INSIGHTS) }],
     },
   },
 ];

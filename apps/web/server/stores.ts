@@ -10,6 +10,8 @@ export interface Stores {
   salt: SaltStore;
   /** PGlite and an in-process Redis twin: everything is lost on restart. Dev and e2e only. */
   memory: boolean;
+  /** Memory stores filled with synthetic demo results (KILOMITA_SEED=demo). */
+  seeded: boolean;
 }
 
 export interface SharingDeps {
@@ -23,13 +25,23 @@ export interface SharingDeps {
 
 type Env = Record<string, string | undefined>;
 
-async function createStores(env: Env): Promise<Stores | null> {
+/** Exported for tests; the app goes through getStores(). */
+export async function createStores(env: Env): Promise<Stores | null> {
   if (env.KILOMITA_STORES === "memory") {
     console.warn(
       "KILOMITA_STORES=memory: shared results live in this process and vanish on restart. Never use it in production.",
     );
     const kv = memoryKv();
-    return { db: await memoryDatabase(), kv, salt: kvSaltStore(kv), memory: true };
+    const db = await memoryDatabase();
+    // Synthetic rows exist only here: no path writes them to a real database.
+    const seeded = env.KILOMITA_SEED === "demo";
+    if (seeded) {
+      const { seedDemo } = await import("./db/seed");
+      console.warn(
+        `KILOMITA_SEED=demo: added ${String(await seedDemo(db, Date.now()))} synthetic results.`,
+      );
+    }
+    return { db, kv, salt: kvSaltStore(kv), memory: true, seeded };
   }
   const url = env.DATABASE_URL?.trim();
   const redisUrl = env.UPSTASH_REDIS_REST_URL?.trim();
@@ -45,19 +57,31 @@ async function createStores(env: Env): Promise<Stores | null> {
       enableTelemetry: false,
     }),
   );
-  return { db: await postgresDatabase(url), kv, salt: kvSaltStore(kv), memory: false };
+  return {
+    db: await postgresDatabase(url),
+    kv,
+    salt: kvSaltStore(kv),
+    memory: false,
+    seeded: false,
+  };
 }
 
-let pending: Promise<Stores | null> | undefined;
+/*
+ * Next loads route handlers and pages as separate module graphs, so a module-level variable here
+ * would exist twice: two PGlites in memory mode (a result shared through the API would never reach
+ * the insight pages), two connection pools in production. The process-wide global is the one copy.
+ */
+const STORES: unique symbol = Symbol.for("kilomita.stores");
+const shared = globalThis as { [STORES]?: Promise<Stores | null> | undefined };
 
 /** One set of stores per process, created on first use. Nothing connects at import time. */
 export function getStores(env: Env = process.env): Promise<Stores | null> {
-  pending ??= createStores(env).catch((error: unknown) => {
-    pending = undefined;
+  shared[STORES] ??= createStores(env).catch((error: unknown) => {
+    shared[STORES] = undefined;
     logFailure("Starting the sharing stores", error);
     return null;
   });
-  return pending;
+  return shared[STORES];
 }
 
 export async function sharingDeps(env: Env = process.env): Promise<SharingDeps> {

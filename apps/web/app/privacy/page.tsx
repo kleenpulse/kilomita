@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { APP_NAME, SHARING, SOURCE_URL } from "@kilomita/shared";
 import { DeleteShared } from "@/components/delete-shared";
+import { SiteFooter } from "../_components/site-footer";
 
 export const metadata: Metadata = {
   title: "Privacy",
@@ -78,8 +79,14 @@ export default function PrivacyPage() {
             can&apos;t be traced back to an address or linked to codes from other days.
           </p>
           <p className="mt-2">
-            Shared results are deleted after 12 months. We publish only medians of groups of at
-            least {SHARING.minGroupSize} results, never a single result.
+            Shared results are deleted after 12 months. For groups of at least{" "}
+            {SHARING.minGroupSize} results we publish a count band (such as &ldquo;50&ndash;99
+            results&rdquo;), rounded medians and a rounded range; smaller groups get no numbers at
+            all. Each end of a range, and sometimes the median, is one real result rounded to 2
+            significant figures, never with who sent it. Counts appear only as bands, so comparing
+            groups doesn&apos;t show how many results separate them. That makes any one result hard
+            to work out, though it can be done, most easily by someone who shares made-up results
+            into a small group.
           </p>
         </section>
 
@@ -105,6 +112,8 @@ export default function PrivacyPage() {
           </p>
         </section>
       </main>
+
+      <SiteFooter />
     </div>
   );
 }

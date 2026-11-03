@@ -1,7 +1,7 @@
 import { z } from "zod";
 import { ISP_SLUGS } from "./isps";
 import { NETWORK_TYPES } from "./network-types";
-import { SHARING } from "./sharing";
+import { type CountBand, SHARING } from "./sharing";
 import { STATE_SLUGS } from "./states";
 
 const SLUG_PATTERN = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
@@ -89,7 +89,22 @@ export const DeleteResultsSchema = z.strictObject({
   secrets: z.array(ResultSecretSchema).min(1).max(SHARING.deleteBatch),
 });
 
-/** One published group. Below the minimum size it carries no numbers at all, not even a count. */
+/** A 95% interval for a median, as [low, high]. Each end is one real result, rounded. */
+export type MedianRange = readonly [low: number, high: number];
+
+/**
+ * One published group. Below the minimum size it carries no numbers at all, not even a count, and
+ * looks the same as a group with no results. Above it, the size is a band and every number is
+ * rounded (Mbps to 2 significant figures, ms to whole ms).
+ */
 export type StatsCell =
   | { key: string; enough: false }
-  | { key: string; enough: true; downloadMbps: number; uploadMbps: number; latencyMs: number };
+  | {
+      key: string;
+      enough: true;
+      nBand: CountBand;
+      downloadMbps: number;
+      uploadMbps: number;
+      latencyMs: number;
+      interval: { downloadMbps: MedianRange; uploadMbps: MedianRange; latencyMs: MedianRange };
+    };
