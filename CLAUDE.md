@@ -10,7 +10,7 @@ KiloMita ("How far your network speed?") is a fast.com-style internet speed test
 | 1     | Measurement engine (`packages/engine`)             | **Done** (e7d504f) |
 | 2     | Test UI (`apps/web`)                               | **Done** (a7e2dae) |
 | 3     | ISP and location detection, consent                | **Done** (876b9ad) |
-| 4     | Results API and storage                            | **Done**           |
+| 4     | Results API and storage                            | **Done** (2b8fb15) |
 | 5     | Public insights dashboard                          | Not started        |
 | 6     | Own test servers (`apps/server`), share cards, PWA | Not started        |
 | 7     | Production hardening                               | Not started        |
@@ -188,7 +188,7 @@ scripts/                    @kilomita/scripts            check-licenses.ts (run 
   - `CLIENT_IP_HEADER`: without it there is no IP hash, and so no duplicate detection.
 - **Files:**
   - `server/db/`: `schema.ts` (one `results` table), `migrations/` (drizzle-kit SQL, committed, no JS), `database.ts` (both drivers; the migrations folder resolves from `process.cwd()`, because compiled server code lives in `.next`), `migrate.ts` (`db:migrate`, `db:purge`)
-  - `server/`: `kv.ts` (`Kv`, `upstashKv`, `memoryKv`), `token.ts`, `limits.ts`, `plausibility.ts`, `stats.ts`, `retention.ts`, `stores.ts` (lazy, one per process; nothing connects at import), `http.ts` (8 KB body cap, `guarded()` logs error codes only), the three `*-route.ts` handlers, `testing.ts` and `fixtures.ts` (tests only)
+  - `server/`: `kv.ts` (`Kv`, `upstashKv`, `memoryKv`), `token.ts`, `limits.ts`, `plausibility.ts`, `stats.ts`, `retention.ts`, `stores.ts` (lazy, one per process; nothing connects at import), `http.ts` (8 KB body cap, `guarded()` logs error codes only, its own or its cause's), the three `*-route.ts` handlers, `testing.ts` and `fixtures.ts` (tests only)
   - `app/api/`: `tokens`, `results`, `results/[id]`, `stats/[dimension]` (thin; `await connection()`; mutations `no-store`)
   - client: `lib/share.ts` (pure send decision, corrections, token reuse), `lib/sharing-api.ts`, `lib/shared-results.ts`, `lib/device-class.ts`, `components/delete-shared.tsx`
 - **Tokens:** `POST /api/tokens` before every run (≤ 3 s; the page shows "Starting…" and the Worker starts only afterwards, so the request never overlaps a measurement). `v1.<payload>.<HMAC-SHA256>`, payload `{ jti, iat, low, ev }`, valid 30 min. Issuing stores nothing. A token is **consumed by the insert itself**: `results.token_hash` (SHA-256 of the jti) is UNIQUE. A retry with the same secret gets 200 and the same id; another secret gets 409. "Test again" reuses the previous token only if no POST carrying it was ever sent (a lost response can hide a consumed token), it has 5 minutes left and the same low-data mode.

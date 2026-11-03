@@ -41,10 +41,16 @@ export async function readJson(request: Request, memory: boolean): Promise<BodyR
   }
 }
 
-/** Logs a failure by its code only: driver errors carry hosts and ports. */
+/**
+ * Logs a failure by its code only: driver errors carry hosts and ports. Drizzle wraps driver errors
+ * in its own query error, so the SQLSTATE or errno may sit on the cause.
+ */
 export function logFailure(what: string, error: unknown): void {
-  const code = (error as { code?: unknown } | null)?.code;
-  console.error(`${what} failed (${typeof code === "string" ? code : "no code"})`);
+  const codeOf = (value: unknown) => (value as { code?: unknown } | null)?.code;
+  const code = [codeOf(error), codeOf((error as { cause?: unknown } | null)?.cause)].find(
+    (candidate): candidate is string => typeof candidate === "string",
+  );
+  console.error(`${what} failed (${code ?? "no code"})`);
 }
 
 /** Turns an unexpected failure into a plain 500. */
