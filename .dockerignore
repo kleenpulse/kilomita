@@ -1,0 +1,9 @@
+# The Docker build context is the repository root; send it only what the Dockerfile copies.
+.git
+**/node_modules
+**/.next
+**/.turbo
+**/.env*
+**/coverage
+**/playwright-report
+**/test-results

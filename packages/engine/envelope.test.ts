@@ -33,7 +33,7 @@ const LINKS: readonly (readonly [string, NetworkConditions])[] = [
 
 async function measure(conditions: NetworkConditions, lowData: boolean): Promise<EngineResult> {
   const network = createSimulatedNetwork({ seed: 7, ...conditions });
-  const test = createSpeedTest({ endpoint: cloudflareEndpoint, fetch: network.fetch, lowData });
+  const test = createSpeedTest({ endpoints: [cloudflareEndpoint], fetch: network.fetch, lowData });
   let outcome: SpeedTestOutcome | undefined;
   void test.start().then((ended) => {
     outcome = ended;

@@ -1,5 +1,34 @@
-import { type Locator, type Page, expect } from "@playwright/test";
+import { type Locator, type Page, test as base, expect } from "@playwright/test";
 import { type MockOptions, type MockStats, mockSpeedEndpoint } from "./mock-endpoint";
+
+export { expect };
+
+const LOCAL_HOSTS = new Set(["localhost", "127.0.0.1"]);
+
+/**
+ * Every spec runs behind a fence: a catch-all route, registered before any mock (later routes take
+ * priority), lets this machine through and aborts and records everything else. DNS fails for every
+ * hostname anyway (playwright.config.ts); this also covers IP literals, which skip DNS.
+ */
+export const test = base.extend<{ unrouted: string[] }>({
+  unrouted: [
+    async ({ context }, use) => {
+      const unrouted: string[] = [];
+      await context.route("**", async (route) => {
+        const url = new URL(route.request().url());
+        if (LOCAL_HOSTS.has(url.hostname)) {
+          await route.continue();
+          return;
+        }
+        unrouted.push(url.origin);
+        await route.abort("blockedbyclient");
+      });
+      await use(unrouted);
+      expect(unrouted, "requests to hosts that no mock answers").toEqual([]);
+    },
+    { auto: true },
+  ],
+});
 
 // A mocked run lasts at most the engine's deadline: 30 s standard, 15 s low-data.
 export const RUN_TIMEOUT = 60_000;

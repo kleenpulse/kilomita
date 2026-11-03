@@ -41,8 +41,11 @@ export default function MethodologyPage() {
           web requests, not lost network packets (ICMP), which a browser can&apos;t measure.
         </p>
         <p className="mt-2">
-          For now the test server is Cloudflare&apos;s nearest edge server. It is not the server of
-          the app or site you use, so a video call or game can behave differently from the test.
+          The test runs against {APP_NAME}&apos;s own test servers. When there is more than one, it
+          first sends each a few small requests and picks the one that answers fastest. If none can
+          be reached, it may fall back to Cloudflare&apos;s nearest edge server. Either way, it is
+          not the server of the app or site you use, so a video call or game can behave differently
+          from the test. Each result records which server it used.
         </p>
       </section>
 

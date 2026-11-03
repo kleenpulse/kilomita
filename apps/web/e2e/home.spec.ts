@@ -1,5 +1,5 @@
 import { APP_NAME, SOURCE_URL } from "@kilomita/shared";
-import { expect, test } from "@playwright/test";
+import { expect, test } from "./helpers";
 
 test("home page renders the brand and links to the source", async ({ page }) => {
   const consoleErrors: string[] = [];
@@ -15,10 +15,24 @@ test("home page renders the brand and links to the source", async ({ page }) => 
 });
 
 // The DNS fence is the backstop if a route is ever missing; checked here without any network use.
-test("launches the browser with the speed test host fenced off", () => {
+test("launches the browser with every hostname but localhost fenced off", () => {
   expect(test.info().project.use.launchOptions?.args).toContain(
-    "--host-resolver-rules=MAP speed.cloudflare.com ~NOTFOUND",
+    "--host-resolver-rules=MAP * ~NOTFOUND, EXCLUDE localhost, EXCLUDE 127.0.0.1",
   );
+});
+
+test("records and refuses a request to a host no mock answers", async ({ page, unrouted }) => {
+  await page.goto("/");
+  const outcome = await page.evaluate(() =>
+    fetch("http://203.0.113.9/").then(
+      () => "answered",
+      () => "refused",
+    ),
+  );
+  expect(outcome).toBe("refused");
+  expect(unrouted).toEqual(["http://203.0.113.9"]);
+  // The fixture would fail this test for it; it was expected here.
+  unrouted.length = 0;
 });
 
 test("links to the privacy page and back", async ({ page }) => {
@@ -33,6 +47,20 @@ test("links to the privacy page and back", async ({ page }) => {
   // The NDPA notice lists everything a shared result keeps, its time included.
   await expect(page.getByText(/when the test ran/)).toBeVisible();
   await expect(page.getByText(/never identifies/)).toHaveCount(0);
+  // Phase 6: each claim below is backed by a test (server logs, share links, the offline copy).
+  await expect(
+    page.getByText(/Our test servers don.t keep a record of your IP address/),
+  ).toBeVisible();
+  await expect(page.getByText(/The company hosting them carries the traffic/)).toBeVisible();
+  await expect(page.getByText(/may use Cloudflare.s speed test servers instead/)).toBeVisible();
+  await expect(
+    page.getByText(
+      /The link itself carries the numbers, network and state shown on your result, and the day of the test/,
+    ),
+  ).toBeVisible();
+  await expect(
+    page.getByText(/Visiting the website without installing it stores no such copy/),
+  ).toBeVisible();
   await page.getByRole("link", { name: "← Back to the test" }).click();
   await expect(page.getByRole("button", { name: "Start" })).toBeVisible();
 });

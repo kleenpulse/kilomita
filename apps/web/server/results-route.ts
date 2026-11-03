@@ -22,7 +22,7 @@ const DAY = 24 * 60 * 60 * 1000;
  * insert burns nothing, and a retry after a lost response gets the same id back.
  */
 export async function handleSubmit(request: Request, deps: SharingDeps): Promise<Response> {
-  const { stores, key, now, trustedHeader } = deps;
+  const { stores, key, now, trustedHeader, knownServers } = deps;
   if (!stores || !key) return unavailable();
   const { db, kv, salt, memory } = stores;
   const reply = (status: number, body: unknown) => json(status, body, { memory });
@@ -43,7 +43,7 @@ export async function handleSubmit(request: Request, deps: SharingDeps): Promise
   const parsed = SubmitResultSchema.safeParse(body.value);
   if (!parsed.success) return reply(400, { error: "invalid" });
   const { result, secret } = parsed.data;
-  const impossible = impossibility(result, claims, time);
+  const impossible = impossibility(result, claims, time, knownServers);
   if (impossible) return reply(422, { error: impossible });
 
   const ip = clientIp(request.headers, trustedHeader);

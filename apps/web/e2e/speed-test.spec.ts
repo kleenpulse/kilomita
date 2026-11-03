@@ -1,5 +1,7 @@
-import { type Page, expect, test } from "@playwright/test";
+import type { Page } from "@playwright/test";
 import {
+  expect,
+  test,
   expectAllRouted,
   expectWideFont,
   fakeConnectionType,
@@ -149,11 +151,16 @@ test.describe("speed test", () => {
     [
       "a refusal",
       { status: { code: 403, on: ["probe", "download", "upload"] } },
-      "refused requests from your network",
+      "refused the test",
+    ],
+    [
+      "a full server",
+      { status: { code: 503, on: ["probe", "download", "upload"] } },
+      "full right now",
     ],
     [
       "a server error",
-      { status: { code: 503, on: ["probe", "download", "upload"] } },
+      { status: { code: 500, on: ["probe", "download", "upload"] } },
       "server had a problem",
     ],
     ["a dropped connection", { fail: true }, "connection dropped"],

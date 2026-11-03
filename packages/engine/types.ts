@@ -5,7 +5,13 @@ import type { Direction, Phase } from "./profiles";
 export type FetchFn = (input: string, init: RequestInit) => Promise<Response>;
 
 export interface SpeedTestOptions {
-  endpoint: TestEndpoint;
+  /**
+   * Candidate servers, at least one unless `fallback` is set. With a choice to make (more than one,
+   * or a fallback), the engine picks the lowest-latency candidate that answers, else the fallback.
+   */
+  endpoints: readonly TestEndpoint[];
+  /** Used only when no candidate is usable. */
+  fallback?: TestEndpoint;
   /** Smaller payloads and shorter phases. */
   lowData?: boolean;
   /** Hard data cap in bytes, at least 1 MB. Defaults to the profile's (50 MB, or 10 MB low-data). */
@@ -22,8 +28,11 @@ export interface SpeedTestOptions {
 
 export type StopReason = "stable" | "time" | "data-cap";
 
+/** `select` is the search for a server, before any measurement. */
+export type RunPhase = "select" | Phase;
+
 export interface ProgressEvent {
-  phase: Phase;
+  phase: RunPhase;
   elapsedMs: number;
   bytesUsed: number;
   /** Live throughput during the download and upload phases. */
@@ -53,12 +62,12 @@ export type EngineResult = Pick<
   stoppedBy: Record<Direction, StopReason>;
 };
 
-export type EngineErrorCode = "cancelled" | "network-lost" | "endpoint-error";
+export type EngineErrorCode = "cancelled" | "network-lost" | "endpoint-error" | "no-server";
 
 export interface EngineError {
   code: EngineErrorCode;
   message: string;
-  phase: Phase;
+  phase: RunPhase;
   /** HTTP status, for endpoint errors caused by one. */
   status?: number;
 }

@@ -1,3 +1,4 @@
+import type { TestEndpoint } from "./endpoint";
 import { gradeBufferbloat } from "./grade";
 import { runIdleLatency } from "./latency";
 import {
@@ -8,17 +9,19 @@ import {
   STANDARD_PROFILE,
 } from "./profiles";
 import { EngineFailure, type RunContext, now } from "./runtime";
+import { selectEndpoint } from "./select";
 import { ByteBudget, runThroughputPhase } from "./transfer";
 import type {
   EngineError,
   FetchFn,
+  RunPhase,
   SpeedTest,
   SpeedTestEvents,
   SpeedTestOptions,
   SpeedTestOutcome,
 } from "./types";
 
-export const ENGINE_VERSION = "0.3.0";
+export const ENGINE_VERSION = "0.4.0";
 
 const MIN_MAX_BYTES = 1_000_000;
 const MIN_MAX_DURATION_MS = 10_000;
@@ -42,7 +45,14 @@ export function createSpeedTest(options: SpeedTestOptions): SpeedTest {
   const profile = lowData ? LOW_DATA_PROFILE : STANDARD_PROFILE;
   const maxBytes = options.maxBytes ?? profile.maxBytes;
   const maxDurationMs = options.maxDurationMs ?? profile.maxDurationMs;
-  const { endpoint } = options;
+  const { endpoints, fallback } = options;
+  const candidate = endpoints[0] ?? fallback;
+  if (!candidate) {
+    throw new RangeError("endpoints must list at least one server, or set a fallback.");
+  }
+  const first: TestEndpoint = candidate;
+  // Only a real choice needs a selection step: one server and no fallback is tested as before.
+  const choosing = endpoints.length > 1 || (endpoints.length === 1 && fallback !== undefined);
   // Wrapped so the caller's fetch is never called as a method of the run context: a native fetch
   // with a foreign `this` throws "Illegal invocation" in browsers (not in Node).
   const custom = options.fetch;
@@ -54,7 +64,7 @@ export function createSpeedTest(options: SpeedTestOptions): SpeedTest {
   const controller = new AbortController();
   let outcome: SpeedTestOutcome | undefined;
   let running: Promise<SpeedTestOutcome> | undefined;
-  let phase: Phase = "latency";
+  let phase: RunPhase = choosing ? "select" : "latency";
 
   function emit<K extends keyof SpeedTestEvents>(type: K, event: SpeedTestEvents[K]): void {
     for (const listener of listeners[type]) {
@@ -87,9 +97,9 @@ export function createSpeedTest(options: SpeedTestOptions): SpeedTest {
     const measuredAt = new Date().toISOString();
     const deadline = startedAt + maxDurationMs - CLEANUP_MARGIN_MS;
     const usage = { bytes: 0 };
-    const ctx: RunContext = {
+    const base: RunContext = {
       fetchFn,
-      endpoint,
+      endpoint: first,
       profile,
       signal: controller.signal,
       deadline,
@@ -111,7 +121,17 @@ export function createSpeedTest(options: SpeedTestOptions): SpeedTest {
     };
 
     try {
-      const idle = await runIdleLatency(ctx, () => phaseDeadline("latency"));
+      let ctx = base;
+      let warmedUp = false;
+      if (choosing) {
+        base.progress({ phase: "select", currentMbps: null, latencyMs: null });
+        const selection = await selectEndpoint(base, endpoints, fallback);
+        ctx = { ...base, endpoint: selection.endpoint };
+        warmedUp = selection.warmedUp;
+      }
+
+      phase = "latency";
+      const idle = await runIdleLatency(ctx, () => phaseDeadline("latency"), warmedUp);
 
       phase = "download";
       const payload = Math.floor(maxBytes * PAYLOAD_SHARE);
@@ -156,7 +176,7 @@ export function createSpeedTest(options: SpeedTestOptions): SpeedTest {
           durationMs: now() - startedAt,
           lowDataMode: lowData,
           engineVersion: ENGINE_VERSION,
-          serverId: endpoint.id,
+          serverId: ctx.endpoint.id,
           measuredAt,
           addedLatencyMs,
           loadedP95Ms: { download: download.loadedP95Ms, upload: upload.loadedP95Ms },

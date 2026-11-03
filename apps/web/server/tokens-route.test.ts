@@ -32,7 +32,7 @@ describe("POST /api/tokens", () => {
     const { token, expiresAt } = (await response.json()) as { token: string; expiresAt: number };
     expect(expiresAt).toBe(NOW + 30 * 60_000);
     const check = verifyToken(TEST_KEY, token, NOW);
-    expect(check.ok && check.claims).toMatchObject({ iat: NOW, low: true, ev: "0.3.0" });
+    expect(check.ok && check.claims).toMatchObject({ iat: NOW, low: true, ev: "0.4.0" });
   });
 
   it("stores nothing for a token", async () => {

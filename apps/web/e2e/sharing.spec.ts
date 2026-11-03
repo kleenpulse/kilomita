@@ -1,5 +1,7 @@
-import { type Page, type Request, expect, test } from "@playwright/test";
+import type { Page, Request } from "@playwright/test";
 import {
+  expect,
+  test,
   FONT_PASSES,
   RUN_TIMEOUT,
   expectWideFont,
@@ -256,7 +258,7 @@ const SEED_RESULT = {
   bytesUsed: 9_015_511,
   durationMs: 1_500,
   lowDataMode: true,
-  engineVersion: "0.3.0",
+  engineVersion: "0.4.0",
   serverId: "cloudflare",
   measuredAt: "2026-11-02T12:00:00.000Z",
   ispSlug: "mtn",

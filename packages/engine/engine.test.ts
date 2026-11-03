@@ -93,7 +93,11 @@ async function runTest(
 function scenario(conditions: NetworkConditions, options: Partial<SpeedTestOptions> = {}) {
   const network = createSimulatedNetwork(conditions);
   const profile = options.lowData ? LOW_DATA_PROFILE : STANDARD_PROFILE;
-  const test = createSpeedTest({ endpoint: cloudflareEndpoint, fetch: network.fetch, ...options });
+  const test = createSpeedTest({
+    endpoints: [cloudflareEndpoint],
+    fetch: network.fetch,
+    ...options,
+  });
   return runTest(test, network, profile, options.maxDurationMs);
 }
 
@@ -329,7 +333,7 @@ describe("latency", () => {
       }
       return response;
     };
-    const test = createSpeedTest({ endpoint: cloudflareEndpoint, fetch: firstLoadedProbeSlow });
+    const test = createSpeedTest({ endpoints: [cloudflareEndpoint], fetch: firstLoadedProbeSlow });
     const result = completed(await runTest(test, network, STANDARD_PROFILE));
     expect(slowed).toBe(true);
     expect(result.loadedLatency.downloadMs).toBe(40);
@@ -344,7 +348,7 @@ describe("latency", () => {
       headers.set("server-timing", "cfRequestDuration;dur=40");
       return new Response(response.body, { status: response.status, headers });
     };
-    const test = createSpeedTest({ endpoint: cloudflareEndpoint, fetch: inflated });
+    const test = createSpeedTest({ endpoints: [cloudflareEndpoint], fetch: inflated });
     const result = completed(await runTest(test, network, STANDARD_PROFILE));
     expect(result.latency.idleMedianMs).toBe(0);
     expect(ResultSchema.safeParse(result).success).toBe(true);
@@ -462,7 +466,7 @@ describe("failures", () => {
       isDownload(input, init) && ++downloads === 4
         ? silentResponse(init)
         : network.fetch(input, init);
-    const test = createSpeedTest({ endpoint: cloudflareEndpoint, fetch });
+    const test = createSpeedTest({ endpoints: [cloudflareEndpoint], fetch });
     within(completed(await runTest(test, network, STANDARD_PROFILE)).downloadMbps, 20, 0.1);
   });
 
@@ -471,7 +475,7 @@ describe("failures", () => {
     let uploads = 0;
     const fetch: FetchFn = (input, init) =>
       init.method === "POST" && ++uploads === 3 ? unanswered(init) : network.fetch(input, init);
-    const test = createSpeedTest({ endpoint: cloudflareEndpoint, fetch });
+    const test = createSpeedTest({ endpoints: [cloudflareEndpoint], fetch });
     within(completed(await runTest(test, network, STANDARD_PROFILE)).uploadMbps, 5, 0.1);
   });
 
@@ -482,7 +486,7 @@ describe("failures", () => {
       isProbe(input, init) && ++probes === FIRST_LOW_DATA_LOADED_PROBE
         ? Promise.reject(new TypeError("Failed to fetch"))
         : network.fetch(input, init);
-    const test = createSpeedTest({ endpoint: cloudflareEndpoint, fetch, lowData: true });
+    const test = createSpeedTest({ endpoints: [cloudflareEndpoint], fetch, lowData: true });
     const result = completed(await runTest(test, network, LOW_DATA_PROFILE));
     expect(result.stoppedBy).toEqual({ download: "data-cap", upload: "data-cap" });
   });
@@ -495,7 +499,7 @@ describe("failures", () => {
       isProbe(input, init) && ++probes === FIRST_LOW_DATA_LOADED_PROBE
         ? unanswered(init, { afterMs: 1000, status: 429 })
         : network.fetch(input, init);
-    const test = createSpeedTest({ endpoint: cloudflareEndpoint, fetch, lowData: true });
+    const test = createSpeedTest({ endpoints: [cloudflareEndpoint], fetch, lowData: true });
     const run = await runTest(test, network, LOW_DATA_PROFILE);
     expect(failed(run)).toMatchObject({ code: "endpoint-error", status: 429, phase: "download" });
     expect(run.elapsedMs).toBeLessThan(5000);
@@ -505,7 +509,7 @@ describe("failures", () => {
 describe("lifecycle", () => {
   it("cancels mid-run with one event and no requests afterwards", async () => {
     const network = createSimulatedNetwork({ downMbps: 20, upMbps: 5, rttMs: 50 });
-    const test = createSpeedTest({ endpoint: cloudflareEndpoint, fetch: network.fetch });
+    const test = createSpeedTest({ endpoints: [cloudflareEndpoint], fetch: network.fetch });
     const events = record(test);
     const outcome = test.start();
     await vi.advanceTimersByTimeAsync(3000);
@@ -526,7 +530,7 @@ describe("lifecycle", () => {
 
   it("treats cancel before start as the outcome, without a request", async () => {
     const network = createSimulatedNetwork({ downMbps: 20, upMbps: 5, rttMs: 50 });
-    const test = createSpeedTest({ endpoint: cloudflareEndpoint, fetch: network.fetch });
+    const test = createSpeedTest({ endpoints: [cloudflareEndpoint], fetch: network.fetch });
     const events = record(test);
     test.cancel();
     const first = test.start();
@@ -538,7 +542,7 @@ describe("lifecycle", () => {
 
   it("ignores cancel after the test has ended and returns the same outcome", async () => {
     const network = createSimulatedNetwork({ downMbps: 20, upMbps: 5, rttMs: 50 });
-    const test = createSpeedTest({ endpoint: cloudflareEndpoint, fetch: network.fetch });
+    const test = createSpeedTest({ endpoints: [cloudflareEndpoint], fetch: network.fetch });
     const run = await runTest(test, network, STANDARD_PROFILE);
     test.cancel();
     expect(run.events.error).toHaveLength(0);
@@ -559,7 +563,7 @@ describe("lifecycle", () => {
   it("logs a throwing listener and keeps going", async () => {
     const logged = vi.spyOn(console, "error").mockImplementation(() => undefined);
     const network = createSimulatedNetwork({ downMbps: 20, upMbps: 5, rttMs: 50 });
-    const test = createSpeedTest({ endpoint: cloudflareEndpoint, fetch: network.fetch });
+    const test = createSpeedTest({ endpoints: [cloudflareEndpoint], fetch: network.fetch });
     test.on("progress", () => {
       throw new Error("listener bug");
     });
@@ -580,14 +584,14 @@ describe("fetch", () => {
   it("calls the global fetch without a foreign `this`", async () => {
     const network = createSimulatedNetwork({ downMbps: 20, upMbps: 5, rttMs: 50 });
     vi.stubGlobal("fetch", strictThisFetch(network.fetch));
-    const test = createSpeedTest({ endpoint: cloudflareEndpoint });
+    const test = createSpeedTest({ endpoints: [cloudflareEndpoint] });
     completed(await runTest(test, network, STANDARD_PROFILE));
   });
 
   it("calls a passed-in fetch without a foreign `this`", async () => {
     const network = createSimulatedNetwork({ downMbps: 20, upMbps: 5, rttMs: 50 });
     const test = createSpeedTest({
-      endpoint: cloudflareEndpoint,
+      endpoints: [cloudflareEndpoint],
       fetch: strictThisFetch(network.fetch),
     });
     completed(await runTest(test, network, STANDARD_PROFILE));
@@ -602,7 +606,9 @@ describe("options", () => {
     { maxDurationMs: 9_999 },
     { maxDurationMs: Number.NaN },
   ])("rejects %o", (options) => {
-    expect(() => createSpeedTest({ endpoint: cloudflareEndpoint, ...options })).toThrow(RangeError);
+    expect(() => createSpeedTest({ endpoints: [cloudflareEndpoint], ...options })).toThrow(
+      RangeError,
+    );
   });
 });
 

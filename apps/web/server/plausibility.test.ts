@@ -7,12 +7,22 @@ const ISSUED = Date.UTC(2026, 10, 2, 12);
 const claims: TokenClaims = { jti: "a".repeat(22), iat: ISSUED, low: true, ev: "0.3.0" };
 const SUBMITTED = ISSUED + 20_000;
 
+const KNOWN = new Set(["cloudflare"]);
 const check = (overrides: Partial<typeof GENUINE_RESULT>, at = SUBMITTED) =>
-  impossibility({ ...GENUINE_RESULT, ...overrides }, claims, at);
+  impossibility({ ...GENUINE_RESULT, ...overrides }, claims, at, KNOWN);
 
 describe("impossibility", () => {
   it("passes a genuine result", () => {
     expect(check({})).toBeNull();
+  });
+
+  it("accepts only the deployment's configured servers", () => {
+    const ours = new Set(["lagos-1"]);
+    const result = { ...GENUINE_RESULT, serverId: "lagos-1" };
+    expect(impossibility(result, claims, SUBMITTED, ours)).toBeNull();
+    expect(impossibility(result, claims, SUBMITTED, KNOWN)).toBe("unknown-server");
+    // With the Cloudflare fallback off, a result claiming Cloudflare is refused.
+    expect(impossibility(GENUINE_RESULT, claims, SUBMITTED, ours)).toBe("unknown-server");
   });
 
   it("refuses a result that contradicts its token", () => {

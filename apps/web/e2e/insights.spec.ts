@@ -1,8 +1,10 @@
 import { randomBytes } from "node:crypto";
 import { ENGINE_VERSION } from "@kilomita/engine";
 import { SOURCE_URL } from "@kilomita/shared";
-import { type Page, expect, test } from "@playwright/test";
+import type { Page } from "@playwright/test";
 import {
+  expect,
+  test,
   FONT_PASSES,
   expectWideFont,
   forceWideFont,

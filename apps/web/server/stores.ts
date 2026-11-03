@@ -2,6 +2,8 @@ import { type Db, memoryDatabase, postgresDatabase } from "./db/database";
 import { logFailure } from "./http";
 import { type SaltStore, kvSaltStore } from "./ip-hash";
 import { type Kv, memoryKv, upstashKv } from "./kv";
+import { knownServerIds } from "../lib/test-servers";
+import { testServerSetup } from "./test-servers";
 import { tokenKey } from "./token";
 
 export interface Stores {
@@ -20,6 +22,8 @@ export interface SharingDeps {
   /** null when RESULT_TOKEN_SECRET is missing or malformed. */
   key: Uint8Array | null;
   trustedHeader: string | undefined;
+  /** The server ids a result may name (lib/test-servers.ts). */
+  knownServers: ReadonlySet<string>;
   now: () => number;
 }
 
@@ -89,6 +93,7 @@ export async function sharingDeps(env: Env = process.env): Promise<SharingDeps> 
     stores: await getStores(env),
     key: tokenKey(env.RESULT_TOKEN_SECRET),
     trustedHeader: env.CLIENT_IP_HEADER,
+    knownServers: knownServerIds(testServerSetup(env).config),
     now: Date.now,
   };
 }

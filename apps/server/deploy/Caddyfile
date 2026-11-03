@@ -1,0 +1,30 @@
+{
+	# No access log anywhere: no site below has a `log` directive. The default logger keeps errors
+	# and certificate messages for the operator, with every client address field deleted. Go's
+	# standard library logs lines such as "TLS handshake error from <address>", where the address
+	# is in the message text that no field filter can reach, so that logger is dropped entirely.
+	# The CI job `server-image` checks that no client address reaches `docker compose logs`.
+	log default {
+		output stderr
+		format filter {
+			wrap json
+			request>remote_ip delete
+			request>client_ip delete
+			request>remote_port delete
+			request>headers>X-Forwarded-For delete
+			request>headers>X-Real-Ip delete
+		}
+		exclude http.stdlib http.log.access
+	}
+}
+
+{$KILOMITA_SERVER_HOST} {
+	# No `encode`: compressing the test's payload would inflate the readings.
+	reverse_proxy server:3940 {
+		transport http {
+			versions h2c
+		}
+		# Pass bytes on as they come, so a download reads at the line's speed, not Caddy's buffer's.
+		flush_interval -1
+	}
+}

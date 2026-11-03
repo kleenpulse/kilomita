@@ -77,10 +77,55 @@ hits=$(git ls-files --cached --others --exclude-standard -- '*.js' '*.cjs' '*.mj
 require_scan_ok "JavaScript file listing" "$?"
 report "JavaScript files are not allowed (TypeScript only)" "$hits"
 
-raw=$(git grep --untracked -noE "(^|[^[:alnum:]_./-])node[[:space:]]+[^-[:space:]\"&|;][^[:space:]\"&|;]*" -- '*package.json')
+# Every node command in a script must run exactly one .ts file, with only the flags listed here.
+# NODE_OPTIONS is refused outright: it can load code (--import=data:...) with no file to scan.
+raw=$(git grep --untracked -nE "NODE_OPTIONS|(^|[^[:alnum:]_./@-])node([.]exe)?[[:space:]]" -- '*package.json')
 require_scan_ok "package.json node scripts" "$?"
-hits=$(printf '%s\n' "$raw" | grep -vE "node[[:space:]]+[^[:space:]\"&|;]+[.]ts$")
-report "package.json script runs node on a non-TypeScript file" "$hits"
+hits=$(printf '%s\n' "$raw" | awk '
+  # The first node command in text that breaks the rule, or "".
+  # Where the command in rest ends: its JSON string closing, or a ) or backtick closing a
+  # subshell, whichever comes first; 0 if none.
+  function stop(rest,   at, i, c) {
+    at = 0
+    for (i = 1; i <= 3; i++) {
+      c = index(rest, substr("\")`", i, 1))
+      if (c && (!at || c < at)) at = c
+    }
+    return at
+  }
+  function bad(text,   rest, end, args, words, n, i, files, file) {
+    # Same boundary as the git grep above, so every selected line is judged.
+    while (match(text, /(^|[^[:alnum:]_.\/@-])node([.]exe)?[[:space:]]+/)) {
+      rest = substr(text, RSTART + RLENGTH)
+      end = stop(rest)
+      args = end ? substr(rest, 1, end - 1) : rest
+      text = end ? substr(rest, end + 1) : ""
+      n = split(args, words, /[[:space:]]+/)
+      files = 0
+      for (i = 1; i <= n; i++) {
+        if (words[i] == "") continue
+        if (words[i] == "--watch" || words[i] == "--disable-warning=ExperimentalWarning") continue
+        if (words[i] ~ /^-/) return "node " args
+        files++
+        file = words[i]
+      }
+      if (!(files == 1 && file ~ /[.]ts$/)) return "node " args
+    }
+    return ""
+  }
+  {
+    match($0, /^[^:]*:[0-9]+:/)
+    where = substr($0, 1, RLENGTH)
+    if ($0 ~ /NODE_OPTIONS/) { print where "NODE_OPTIONS"; next }
+    line = substr($0, RLENGTH + 1)
+    gsub(/\\n/, ";", line)
+    n = split(line, commands, /&&|[|][|]|[&;|]/)
+    for (j = 1; j <= n; j++) {
+      found = bad(commands[j])
+      if (found != "") { print where found; next }
+    }
+  }')
+report "package.json script runs node on anything but one TypeScript file" "$hits"
 
 hits=$(git grep --untracked -nE 'branch_structure[.]json|temp_auto_push[.]bat|temp_interactive_push[.]bat' -- '*.gitignore')
 require_scan_ok ".gitignore entries" "$?"

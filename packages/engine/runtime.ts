@@ -22,10 +22,14 @@ export interface RunContext {
 
 /** A failure that ends the run. */
 export class EngineFailure extends Error {
-  readonly code: "network-lost" | "endpoint-error";
+  readonly code: "network-lost" | "endpoint-error" | "no-server";
   readonly status: number | undefined;
 
-  constructor(code: "network-lost" | "endpoint-error", message: string, status?: number) {
+  constructor(
+    code: "network-lost" | "endpoint-error" | "no-server",
+    message: string,
+    status?: number,
+  ) {
     super(message);
     this.code = code;
     this.status = status;

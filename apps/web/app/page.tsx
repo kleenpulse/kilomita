@@ -1,6 +1,10 @@
+import type { Metadata } from "next";
 import { APP_NAME, TAGLINE } from "@kilomita/shared";
 import { SpeedTest } from "@/components/speed-test";
 import { SiteFooter } from "./_components/site-footer";
+
+// The installed app opens at /?source=pwa; search engines should only ever list /.
+export const metadata: Metadata = { alternates: { canonical: "/" } };
 
 export default function HomePage() {
   return (

@@ -1,4 +1,3 @@
-import { cloudflareEndpoint } from "@kilomita/engine";
 import { TEST_LIMITS, gradeBufferbloat, outsideEnvelope } from "@kilomita/engine/limits";
 import type { SpeedTestResult } from "@kilomita/shared";
 import type { TokenClaims } from "./token";
@@ -10,7 +9,6 @@ import type { TokenClaims } from "./token";
  * refusing real 2G results would bias the numbers upwards.
  */
 
-const KNOWN_SERVERS: ReadonlySet<string> = new Set([cloudflareEndpoint.id]);
 /** Slack for timers and the server's own handling. */
 const SLACK_MS = 1_000;
 const MAX_LATENCY_MS = 60_000;
@@ -27,17 +25,19 @@ export type Impossible =
   | "speed-out-of-range"
   | "grade-mismatch";
 
+/** `knownServers`: the deployment's configured test servers (lib/test-servers.ts). */
 export function impossibility(
   result: SpeedTestResult,
   claims: TokenClaims,
   now: number,
+  knownServers: ReadonlySet<string>,
 ): Impossible | null {
   if (result.lowDataMode !== claims.low) return "profile-mismatch";
   // The token carries the server's engine version when it was issued, so a run that straddles a
   // deploy still matches. A tab loaded before an engine bump gets the new version on its next token
   // and is refused until it reloads: a stale engine's numbers aren't comparable.
   if (result.engineVersion !== claims.ev) return "engine-mismatch";
-  if (!KNOWN_SERVERS.has(result.serverId)) return "unknown-server";
+  if (!knownServers.has(result.serverId)) return "unknown-server";
   const limits = result.lowDataMode ? TEST_LIMITS.lowData : TEST_LIMITS.standard;
   if (result.bytesUsed > limits.maxBytes) return "over-data-cap";
   if (result.durationMs > limits.maxDurationMs + SLACK_MS) return "over-time-limit";

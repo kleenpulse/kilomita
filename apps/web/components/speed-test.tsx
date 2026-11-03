@@ -1,6 +1,6 @@
 "use client";
 
-import type { EngineResult, Phase, ProgressEvent } from "@kilomita/engine";
+import type { EngineResult, ProgressEvent, RunPhase } from "@kilomita/engine";
 import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from "react";
 import { type ConnectionKind, readConnectionKind } from "@/lib/connection-hint";
 import { readConsent, subscribeConsent, writeConsent } from "@/lib/consent";
@@ -8,7 +8,15 @@ import { type Detection, fetchDetection } from "@/lib/detection";
 import { readDeviceClass } from "@/lib/device-class";
 import { formatMbps, formatMegabytes } from "@/lib/format";
 import { readLowData, subscribeLowData, writeLowData } from "@/lib/low-data";
-import { CRASHED_MESSAGE, LEFT_PAGE_MESSAGE, errorMessage } from "@/lib/messages";
+import {
+  CRASHED_MESSAGE,
+  LEFT_PAGE_MESSAGE,
+  NO_SERVER_MESSAGE,
+  OFFLINE_MESSAGE,
+  UNREACHABLE_MESSAGE,
+  UPDATED_MESSAGE,
+  errorMessage,
+} from "@/lib/messages";
 import { type Run, type RunOutcome, startRun } from "@/lib/run-in-worker";
 import {
   type NetworkSelection,
@@ -21,8 +29,10 @@ import {
 import { addPending, forget, newSecret, setSharedId } from "@/lib/shared-results";
 import {
   type HeldToken,
+  type RunServers,
   type SubmitOutcome,
   correctResult,
+  requestTestServers,
   requestToken,
   submitResult,
 } from "@/lib/sharing-api";
@@ -30,6 +40,9 @@ import { ConsentCard } from "./consent-card";
 import { LowDataSwitch } from "./low-data-switch";
 import { NetworkDetails } from "./network-details";
 import { PLACEHOLDER_RESULT, Reveal, ResultPanel } from "./result-panel";
+import { ShareRow } from "./share-row";
+
+type ShareModule = typeof import("@/lib/share-card");
 
 type View =
   | { status: "idle" }
@@ -37,7 +50,7 @@ type View =
   | { status: "starting" }
   | {
       status: "running";
-      phase: Phase;
+      phase: RunPhase;
       download: number | null;
       upload: number | null;
       bytesUsed: number;
@@ -45,7 +58,8 @@ type View =
   | { status: "complete"; result: EngineResult }
   | { status: "ended"; message: string; alert: boolean; bytesUsed: number };
 
-const PHASE_TEXT: Record<Phase, string> = {
+const PHASE_TEXT: Record<RunPhase, string> = {
+  select: "Finding the nearest server…",
   latency: "Checking latency…",
   download: "Testing download…",
   upload: "Testing upload…",
@@ -56,19 +70,44 @@ const RESEND_DELAY_MS = 2_000;
 /** Corrections wait for the selectors to settle. */
 const CORRECTION_DELAY_MS = 1_000;
 
-function endedView(outcome: Exclude<RunOutcome, { status: "complete" }>, bytesUsed: number): View {
+const alertView = (message: string, bytesUsed: number): View => ({
+  status: "ended",
+  message,
+  alert: true,
+  bytesUsed,
+});
+
+function endedView(
+  outcome: Exclude<RunOutcome, { status: "complete" }>,
+  bytesUsed: number,
+  offline: boolean,
+): View {
   switch (outcome.status) {
     case "stopped":
-      return outcome.reason === "user"
-        ? { status: "ended", message: "Test stopped.", alert: false, bytesUsed }
-        : { status: "ended", message: LEFT_PAGE_MESSAGE, alert: true, bytesUsed };
+      if (outcome.reason === "user") {
+        return { status: "ended", message: "Test stopped.", alert: false, bytesUsed };
+      }
+      return alertView(
+        outcome.reason === "offline" ? OFFLINE_MESSAGE : LEFT_PAGE_MESSAGE,
+        bytesUsed,
+      );
     case "crashed":
-      return { status: "ended", message: CRASHED_MESSAGE, alert: true, bytesUsed };
+      return alertView(outcome.loaded ? CRASHED_MESSAGE : UPDATED_MESSAGE, bytesUsed);
     case "error":
-      return outcome.error.code === "cancelled"
-        ? { status: "ended", message: "Test stopped.", alert: false, bytesUsed }
-        : { status: "ended", message: errorMessage(outcome.error), alert: true, bytesUsed };
+      if (outcome.error.code === "cancelled") {
+        return { status: "ended", message: "Test stopped.", alert: false, bytesUsed };
+      }
+      if (outcome.error.code === "network-lost" && offline) {
+        return alertView(OFFLINE_MESSAGE, bytesUsed);
+      }
+      return alertView(errorMessage(outcome.error), bytesUsed);
   }
+}
+
+/** Mirrors the engine: a selection step runs only when there is a choice to make. */
+function choosing({ servers, fallback, ticket }: RunServers): boolean {
+  const ours = ticket === null ? 0 : servers.length;
+  return ours > 1 || (ours === 1 && fallback);
 }
 
 function bigNumber(view: View): string {
@@ -128,6 +167,7 @@ export function SpeedTest() {
   const [runToken, setRunToken] = useState<HeldToken | null>(null);
   const [tokenExpired, setTokenExpired] = useState(false);
   const [share, setShare] = useState<ShareProgress>({ status: "not-sent" });
+  const [shareModule, setShareModule] = useState<ShareModule | null>(null);
   const edited = useRef({ isp: false, state: false });
   const run = useRef<Run | null>(null);
   /** The latest run started, so a late detection for an older run is dropped. */
@@ -179,11 +219,17 @@ export function SpeedTest() {
   }, []);
 
   const measure = useCallback(
-    (token: HeldToken | null) => {
+    (token: HeldToken | null, servers: RunServers) => {
       latestToken.current = { token, sent: false };
       setRunToken(token);
-      setView({ status: "running", phase: "latency", download: null, upload: null, bytesUsed: 0 });
-      const current = startRun(lowData, onProgress);
+      setView({
+        status: "running",
+        phase: choosing(servers) ? "select" : "latency",
+        download: null,
+        upload: null,
+        bytesUsed: 0,
+      });
+      const current = startRun({ lowData, ...servers }, onProgress);
       run.current = current;
       lastRun.current = current;
       void current.outcome.then((outcome) => {
@@ -194,7 +240,7 @@ export function SpeedTest() {
           setView({ status: "complete", result: outcome.result });
           detect(current);
         } else {
-          setView(endedView(outcome, bytesUsed.current));
+          setView(endedView(outcome, bytesUsed.current, !navigator.onLine));
         }
       });
     },
@@ -206,15 +252,28 @@ export function SpeedTest() {
     bytesUsed.current = 0;
     setShare({ status: "not-sent" });
     setTokenExpired(false);
-    setView({ status: "starting" });
     const mine = ++attempt.current;
+    // Offline: say so at once, without sending anything.
+    if (!navigator.onLine) {
+      setView(alertView(OFFLINE_MESSAGE, 0));
+      return;
+    }
+    setView({ status: "starting" });
     const { token, sent } = latestToken.current;
-    // The token is in hand before the Worker starts, so asking never overlaps a measurement.
+    // The token and the server list are in hand before the Worker starts, so asking never
+    // overlaps a measurement.
     const ready = reusable(token, sent, lowData, Date.now())
       ? Promise.resolve(token)
       : requestToken(lowData);
-    void ready.then((held) => {
-      if (attempt.current === mine) measure(held);
+    void Promise.all([ready, requestTestServers(lowData)]).then(([held, servers]) => {
+      if (attempt.current !== mine) return;
+      if (servers === null) {
+        setView(alertView(navigator.onLine ? UNREACHABLE_MESSAGE : OFFLINE_MESSAGE, 0));
+      } else if ((servers.ticket === null || servers.servers.length === 0) && !servers.fallback) {
+        setView(alertView(NO_SERVER_MESSAGE, 0));
+      } else {
+        measure(held, servers);
+      }
     });
   }, [view.status, lowData, measure]);
 
@@ -239,11 +298,48 @@ export function SpeedTest() {
         setView({ status: "ended", message: LEFT_PAGE_MESSAGE, alert: true, bytesUsed: 0 });
       }
     };
+    // A lost connection ends the run at once, with what it used, instead of waiting out the stall.
+    const onOffline = () => {
+      if (run.current) {
+        run.current.stop("offline");
+      } else {
+        attempt.current++;
+        setView(alertView(OFFLINE_MESSAGE, 0));
+      }
+    };
     document.addEventListener("visibilitychange", onVisibility);
+    window.addEventListener("offline", onOffline);
     return () => {
       document.removeEventListener("visibilitychange", onVisibility);
+      window.removeEventListener("offline", onOffline);
     };
   }, [busy]);
+
+  // The installed app's offline copy: registered only when the app itself is open (its start URL,
+  // or standalone), so a plain visit stores nothing. Production only (dev chunk names aren't
+  // stable), and once the page is idle, through import(), so it adds nothing to the first download.
+  useEffect(() => {
+    if (process.env.NODE_ENV !== "production" || !("serviceWorker" in navigator)) return;
+    const appLaunch =
+      new URLSearchParams(window.location.search).get("source") === "pwa" ||
+      window.matchMedia("(display-mode: standalone)").matches;
+    if (!appLaunch) return;
+    const register = () => {
+      void import("@/lib/pwa").then(({ registerServiceWorker }) => {
+        registerServiceWorker(navigator.serviceWorker);
+      });
+    };
+    if ("requestIdleCallback" in window) {
+      const id = requestIdleCallback(register, { timeout: 5_000 });
+      return () => {
+        cancelIdleCallback(id);
+      };
+    }
+    const timer = setTimeout(register, 2_000);
+    return () => {
+      clearTimeout(timer);
+    };
+  }, []);
 
   // Leaving the page must not leave a run spending data.
   useEffect(
@@ -268,6 +364,16 @@ export function SpeedTest() {
   }, [view.status, runToken]);
 
   const complete = view.status === "complete" ? view : null;
+
+  // The share code loads once there is a result to share, never with the page, and early enough
+  // that a tap on Share result doesn't wait for it (Safari's share sheet needs a fresh tap).
+  const hasResult = complete !== null;
+  useEffect(() => {
+    if (!hasResult || shareModule !== null) return;
+    void import("@/lib/share-card").then(setShareModule);
+  }, [hasResult, shareModule]);
+  const card =
+    complete && shareModule ? shareModule.cardFromResult(complete.result, selection) : null;
   const step = complete
     ? shareStep({
         consent,
@@ -421,6 +527,9 @@ export function SpeedTest() {
               shareStatus={step === null ? null : step.kind === "show" ? step.status : "sending"}
               onChoose={writeConsent}
             />
+          </Reveal>
+          <Reveal shown={!!complete} order={7} className="mt-6">
+            <ShareRow key={complete?.result.measuredAt} share={shareModule} card={card} />
           </Reveal>
         </div>
         {ended ? (

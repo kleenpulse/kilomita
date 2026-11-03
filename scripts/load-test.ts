@@ -59,7 +59,7 @@ function result(user: number, round: number) {
     bytesUsed: 9_000_000,
     durationMs: DURATION_MS,
     lowDataMode: true,
-    engineVersion: "0.3.0",
+    engineVersion: "0.4.0",
     serverId: "cloudflare",
     measuredAt: new Date().toISOString(),
     ispSlug: "mtn",

@@ -26,9 +26,16 @@ export default function PrivacyPage() {
         <section>
           <h2 className="text-lg font-semibold">What the test contacts</h2>
           <p className="mt-1">
-            The speed test downloads and uploads data to a test server, currently run by Cloudflare.
-            Like any server, it sees your IP address. Its responses also include your IP address and
-            approximate location; {APP_NAME} never reads them.
+            The speed test downloads and uploads data to {APP_NAME}&apos;s own test servers. If
+            there is more than one, it contacts each briefly to find the nearest. Like any server,
+            they see your IP address. Our test servers don&apos;t keep a record of your IP address;
+            they only count how much data they move each day. The company hosting them carries the
+            traffic, like any network.
+          </p>
+          <p className="mt-2">
+            If our servers can&apos;t be reached, the test may use Cloudflare&apos;s speed test
+            servers instead. Like any server, they see your IP address. Their responses also include
+            your IP address and approximate location; {APP_NAME} never reads them.
           </p>
           <p className="mt-2">
             Our own server also receives your IP address with every request, as every website does.
@@ -47,8 +54,28 @@ export default function PrivacyPage() {
             later.
           </p>
           <p className="mt-2">
-            Before each test our server gives your browser a one-time test pass. It says nothing
-            about you; it only proves that a shared result came from a real test.
+            Before each test our server gives your browser a one-time test pass, and a ticket that
+            lets our test servers tell a real test from someone using them as free downloads.
+            Neither says anything about you; the ticket expires after two minutes.
+          </p>
+        </section>
+
+        <section>
+          <h2 className="text-lg font-semibold">Share links</h2>
+          <p className="mt-1">
+            When you press Share result, you get a link. The link itself carries the numbers,
+            network and state shown on your result, and the day of the test. We store nothing for
+            it, and anyone with the link can see it. Apps like WhatsApp fetch its preview picture
+            from us, as they would from any website.
+          </p>
+        </section>
+
+        <section>
+          <h2 className="text-lg font-semibold">The installed app</h2>
+          <p className="mt-1">
+            If you install {APP_NAME} on your phone or computer, the app keeps a copy of the home
+            page on your device so it opens offline. It never stores your results there. Visiting
+            the website without installing it stores no such copy.
           </p>
         </section>
 

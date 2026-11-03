@@ -1,0 +1,28 @@
+{
+  "name": "@kilomita/server",
+  "version": "0.0.0",
+  "private": true,
+  "license": "AGPL-3.0-only",
+  "type": "module",
+  "scripts": {
+    "dev": "node --watch main.ts",
+    "start": "node main.ts",
+    "lint": "eslint .",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "fastify": "5.12.7"
+  },
+  "devDependencies": {
+    "@kilomita/engine": "workspace:*",
+    "@kilomita/eslint-config": "workspace:*",
+    "@kilomita/shared": "workspace:*",
+    "@kilomita/typescript-config": "workspace:*",
+    "@types/node": "^24",
+    "eslint": "^10.14.0",
+    "jiti": "^2.7.0",
+    "typescript": "~6.0.3",
+    "vitest": "^5.0.5"
+  }
+}

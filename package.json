@@ -21,6 +21,7 @@
   "trustedDependencies": [],
   "scripts": {
     "dev": "turbo run dev --filter=@kilomita/web",
+    "dev:server": "turbo run dev --filter=@kilomita/server",
     "build": "turbo run build",
     "start": "bun --filter @kilomita/web start",
     "typecheck": "turbo run typecheck",

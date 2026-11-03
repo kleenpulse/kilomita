@@ -26,7 +26,7 @@ export async function testStores(now: () => number): Promise<Stores> {
 export const TEST_KEY = tokenKey(randomBytes(32).toString("base64")) ?? new Uint8Array();
 
 export function testDeps(stores: Stores, now: () => number, trustedHeader?: string): SharingDeps {
-  return { stores, key: TEST_KEY, trustedHeader, now };
+  return { stores, key: TEST_KEY, trustedHeader, knownServers: new Set(["cloudflare"]), now };
 }
 
 export const secret = () => randomBytes(32).toString("base64url");

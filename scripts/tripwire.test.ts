@@ -108,6 +108,55 @@ describe("tripwire.sh repository mode", { timeout: 30_000 }, () => {
     expect(result.stdout).toContain("tasks.json");
   });
 
+  it.each([
+    ["a flag before a JavaScript file", "node --watch evil.js"],
+    ["code loaded by a flag", "node --require ./x.cjs main.ts"],
+    ["inline code", "node -e 0"],
+    ["NODE_OPTIONS", "NODE_OPTIONS=--import=data:text/javascript,0 node main.ts"],
+    ["a background command", "true & node evil.js"],
+    ["a chained command", "true && node evil.js"],
+    ["a piped command", "echo | node evil.js"],
+    ["a second command on a new line", "true\\nnode evil.js"],
+    ["two files", "node main.ts evil.js"],
+    ["a command substitution", "echo $(node evil.js)"],
+    ["a backtick substitution", "echo `node evil.js`"],
+    ["a subshell", "sh -c (node evil.js)"],
+    ["node.exe", "node.exe evil.js"],
+  ])("flags %s in a package.json script", (_name, script) => {
+    const dir = makeTempDir();
+    writeFixture(dir, {
+      ...CLEAN_FILES,
+      "package.json": `{ "scripts": { "check": "node scripts/check.ts", "x": "${script}" } }\n`,
+    });
+    gitInit(dir);
+
+    const result = runTripwire(dir);
+
+    expect(result.status).toBe(1);
+    expect(result.stdout).toContain("anything but one TypeScript file");
+  });
+
+  it.each([
+    ["the watch flag", "node --watch main.ts"],
+    ["the experimental-warning flag", "node --disable-warning=ExperimentalWarning main.ts"],
+    ["a chain of TypeScript runs", "node a.ts && node b.ts"],
+    ["a TypeScript run in a command substitution", "echo $(node main.ts)"],
+    ["the node engine field", ""],
+  ])("passes %s", (_name, script) => {
+    const dir = makeTempDir();
+    const scripts = script ? `, "x": "${script}"` : "";
+    writeFixture(dir, {
+      ...CLEAN_FILES,
+      "package.json": `{ "engines": { "node": ">=20.9" }, "devDependencies": { "@types/node": "^24" }, "scripts": { "check": "node scripts/check.ts"${scripts} } }\n`,
+    });
+    gitInit(dir);
+
+    const result = runTripwire(dir);
+
+    expect(result.stdout).toContain("tripwire: clean");
+    expect(result.status).toBe(0);
+  });
+
   it("exits 2 when a scan errors instead of reporting clean", () => {
     const dir = makeTempDir();
     writeFixture(dir, CLEAN_FILES);

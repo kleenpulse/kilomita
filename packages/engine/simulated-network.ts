@@ -20,6 +20,8 @@ export interface NetworkConditions {
   bloatMs?: number;
   /** Server processing time, added to every response and reported in Server-Timing. */
   serverTimeMs?: number;
+  /** How Server-Timing reports it: Cloudflare's `cfSpeedWorker` (default) or our servers' `app`. */
+  serverTiming?: "cloudflare" | "app";
   /** Extra round trips on the very first request (DNS, TCP, TLS). */
   handshakeRtts?: number;
   /** Probability that a request fails with a network error. */
@@ -104,7 +106,8 @@ export function createSimulatedNetwork(conditions: NetworkConditions): Simulated
   const headers = () => {
     const result = new Headers();
     if (conditions.serverTimeMs !== undefined) {
-      result.set("server-timing", `cfSpeedWorker;dur=${conditions.serverTimeMs}`);
+      const name = conditions.serverTiming === "app" ? "app" : "cfSpeedWorker";
+      result.set("server-timing", `${name};dur=${conditions.serverTimeMs}`);
     }
     return result;
   };
@@ -354,6 +357,14 @@ export function blockRealNetwork(): void {
   vi.stubGlobal("fetch", () => {
     throw new Error("Real network access is blocked in tests. Inject `fetch`.");
   });
+}
+
+/** Sends each request to the fake network for its origin; any other origin fails like no DNS. */
+export function routeByOrigin(routes: Record<string, FetchFn>): FetchFn {
+  return (input, init) => {
+    const route = routes[new URL(input).origin];
+    return route ? route(input, init) : Promise.reject(new TypeError("Failed to fetch"));
+  };
 }
 
 /** A run context for testing one part of the engine on its own. */

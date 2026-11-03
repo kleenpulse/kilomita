@@ -48,6 +48,16 @@ jobs:
           done
           exit "$failed"
 
+  server-image:
+    name: Test server image and logs
+    needs: tripwire
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      # Pulls only the digest-pinned base images; talks to containers on this runner only.
+      - run: sh apps/server/deploy/ci-check.sh
+
   check:
     name: Typecheck, lint, test, build, e2e
     needs: tripwire

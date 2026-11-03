@@ -1,5 +1,6 @@
 import type { CorrectResult, SubmitResult } from "@kilomita/shared";
 import { SHARING } from "@kilomita/shared/lists";
+import type { TestServer } from "./test-servers";
 
 /** A test token as the browser holds it. */
 export interface HeldToken {
@@ -53,6 +54,45 @@ export async function requestToken(
     const { token } = (await response.json()) as { token: unknown };
     if (typeof token !== "string") return null;
     return { value: token, expiresAt: asked + SHARING.tokenTtlMs, lowData };
+  } catch {
+    return null;
+  }
+}
+
+/** What one run may test against (POST /api/test-servers). */
+export interface RunServers {
+  servers: TestServer[];
+  fallback: boolean;
+  /** Signed for our servers; null when none is offered. */
+  ticket: string | null;
+}
+
+function isRunServers(value: unknown): value is RunServers {
+  if (typeof value !== "object" || value === null) return false;
+  const { servers, fallback, ticket } = value as Record<string, unknown>;
+  return (
+    Array.isArray(servers) &&
+    servers.every(
+      (server: unknown) =>
+        typeof (server as TestServer | null)?.id === "string" &&
+        typeof (server as TestServer | null)?.origin === "string",
+    ) &&
+    typeof fallback === "boolean" &&
+    (ticket === null || typeof ticket === "string")
+  );
+}
+
+/** Asked for after Start, alongside the token. null if it can't be had: the run can't start. */
+export async function requestTestServers(
+  lowData: boolean,
+  fetchFn: FetchFn = browserFetch,
+  timeoutMs = 3_000,
+): Promise<RunServers | null> {
+  const response = await send(fetchFn, "/api/test-servers", "POST", { lowData }, timeoutMs);
+  if (!response?.ok) return null;
+  try {
+    const body: unknown = await response.json();
+    return isRunServers(body) ? body : null;
   } catch {
     return null;
   }

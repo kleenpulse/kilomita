@@ -1,0 +1,45 @@
+# The KiloMita test server behind Caddy. Run from this folder: `docker compose up -d --build`.
+# Settings come from ./.env (see DEPLOY.md); never commit that file.
+
+# Rotated, so container output can't fill the disk. Nothing in it names a client (Caddyfile).
+x-logging: &logging
+  driver: local
+  options:
+    max-size: "10m"
+    max-file: "3"
+
+services:
+  server:
+    build:
+      context: ../../..
+      dockerfile: apps/server/deploy/Dockerfile
+    restart: unless-stopped
+    environment:
+      KILOMITA_SERVER_ORIGINS: ${KILOMITA_SERVER_ORIGINS:?set it in .env}
+      KILOMITA_SERVER_TICKET_SECRET: ${KILOMITA_SERVER_TICKET_SECRET:?set it in .env}
+      KILOMITA_EGRESS_BUDGET_GB: ${KILOMITA_EGRESS_BUDGET_GB:-}
+    volumes:
+      - server-state:/data
+    logging: *logging
+
+  caddy:
+    image: caddy:2@sha256:36c24ad91a7ff7bc4c87fe22bfa8df3c4b18da0773d73fc12ee2c52b98c0bb7e
+    restart: unless-stopped
+    depends_on:
+      - server
+    ports:
+      - "80:80"
+      - "443:443"
+      - "443:443/udp"
+    environment:
+      KILOMITA_SERVER_HOST: ${KILOMITA_SERVER_HOST:?set it in .env}
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy-data:/data
+      - caddy-config:/config
+    logging: *logging
+
+volumes:
+  server-state:
+  caddy-data:
+  caddy-config:

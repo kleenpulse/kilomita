@@ -100,13 +100,15 @@ export interface IdleLatency {
 
 /**
  * Idle latency, jitter and request loss. `phaseDeadline` is asked after the warm-up, so a slow
- * warm-up doesn't eat the probes' time.
+ * warm-up doesn't eat the probes' time. `warmedUp` skips the warm-up when server selection has
+ * already set up the connection.
  */
 export async function runIdleLatency(
   ctx: RunContext,
   phaseDeadline: () => number,
+  warmedUp = false,
 ): Promise<IdleLatency> {
-  await warmUp(ctx);
+  if (!warmedUp) await warmUp(ctx);
   const deadline = phaseDeadline();
   const samples: number[] = [];
   let sent = 0;
