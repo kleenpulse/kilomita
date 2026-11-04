@@ -25,9 +25,10 @@ ENV NODE_ENV=production \
 WORKDIR /app
 COPY --from=deps /app/node_modules ./node_modules
 COPY --from=deps /app/apps/server/node_modules ./apps/server/node_modules
+# Every file main.ts and healthcheck.ts import, and nothing else (image.test.ts checks this list).
 COPY apps/server/package.json apps/server/main.ts apps/server/app.ts apps/server/budget.ts \
-     apps/server/config.ts apps/server/cors.ts apps/server/ticket.ts apps/server/healthcheck.ts \
-     ./apps/server/
+     apps/server/config.ts apps/server/cors.ts apps/server/log.ts apps/server/ticket.ts \
+     apps/server/healthcheck.ts ./apps/server/
 RUN mkdir /data && chown node:node /data
 USER node
 VOLUME /data
