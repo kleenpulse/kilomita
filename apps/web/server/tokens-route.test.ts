@@ -1,6 +1,8 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { results } from "./db/schema";
+import { ADDRESS_LIMITS } from "./address-limits";
 import { LIMITS } from "./limits";
+import { noRecorder } from "./metrics";
 import type { SharingDeps, Stores } from "./stores";
 import { TEST_KEY, jsonRequest, resultRow, testDeps, testStores } from "./testing";
 import { verifyToken } from "./token";
@@ -46,7 +48,7 @@ describe("POST /api/tokens", () => {
     expect((await ask({ lowData: true, extra: 1 })).status).toBe(400);
   });
 
-  it("has a global ceiling per minute, and nothing per address", async () => {
+  it("has a global ceiling per minute, and nothing per address without CLIENT_IP_HEADER", async () => {
     const minute = Math.floor(NOW / 60_000);
     for (let i = 0; i < LIMITS.tokensPerMinute; i++) {
       await stores.kv.countInWindow(`tokens:${String(minute)}`, (minute + 1) * 60_000);
@@ -54,6 +56,44 @@ describe("POST /api/tokens", () => {
     expect((await ask()).status).toBe(429);
     time = (minute + 1) * 60_000;
     expect((await ask()).status).toBe(200);
+  });
+
+  describe("per address, with CLIENT_IP_HEADER", () => {
+    const fromAddress = (ip: string, record = noRecorder) =>
+      handleTokenRequest(
+        jsonRequest("POST", "/api/tokens", { lowData: false }, { "x-real-ip": ip }),
+        testDeps(stores, () => time, "x-real-ip"),
+        (task) => {
+          scheduled.push(task);
+        },
+        record,
+      );
+
+    it("allows runsPerHour tokens an hour to one address, then 429, and counts the refusal", async () => {
+      const recorded: string[] = [];
+      const record = (fields: readonly string[]) => {
+        recorded.push(...fields);
+      };
+      for (let i = 0; i < ADDRESS_LIMITS.runsPerHour; i++) {
+        expect((await fromAddress("102.88.34.10", record)).status).toBe(200);
+      }
+      const refused = await fromAddress("102.88.34.10", record);
+      expect(refused.status).toBe(429);
+      expect(await refused.json()).toEqual({ error: "rate-limited" });
+      expect(recorded.filter((field) => field === "limited:tokens")).toHaveLength(1);
+      expect(recorded.filter((field) => field === "token:std")).toHaveLength(
+        ADDRESS_LIMITS.runsPerHour,
+      );
+      expect((await fromAddress("102.88.34.11")).status).toBe(200);
+    });
+
+    it("still issues tokens when the limiter's Redis calls fail", async () => {
+      vi.spyOn(console, "warn").mockImplementation(() => undefined);
+      const count = stores.kv.countInWindow.bind(stores.kv);
+      stores.kv.countInWindow = (key, end) =>
+        key.startsWith("rl:") ? Promise.reject(new Error("redis down")) : count(key, end);
+      expect((await fromAddress("102.88.34.10")).status).toBe(200);
+    });
   });
 
   it("is unavailable without stores or a usable key", async () => {
@@ -77,7 +117,9 @@ describe("POST /api/tokens", () => {
     const log = vi.spyOn(console, "error").mockImplementation(() => undefined);
     await ask(undefined, { ...deps, stores: { ...stores, db: failing } });
     await expect(Promise.all(scheduled.map((task) => task()))).resolves.toBeDefined();
-    expect(log.mock.calls).toEqual([["Retention purge failed (ECONNREFUSED)"]]);
+    expect(log.mock.calls.map(([line]) => JSON.parse(String(line)) as unknown)).toEqual([
+      expect.objectContaining({ level: "error", event: "retention-purge", code: "ECONNREFUSED" }),
+    ]);
     log.mockRestore();
   });
 

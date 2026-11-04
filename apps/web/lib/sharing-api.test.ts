@@ -1,6 +1,12 @@
 import { SHARING } from "@kilomita/shared/lists";
 import { describe, expect, it } from "vitest";
-import { correctResult, deleteResults, requestToken, submitResult } from "./sharing-api";
+import {
+  correctResult,
+  deleteResults,
+  requestTestServers,
+  requestToken,
+  submitResult,
+} from "./sharing-api";
 
 const answer =
   (status: number, body: unknown = {}): typeof fetch =>
@@ -34,6 +40,28 @@ describe("requestToken", () => {
         });
       });
     expect(await requestToken(true, Date.now, never, 10)).toBeNull();
+  });
+});
+
+describe("requestTestServers", () => {
+  const list = {
+    servers: [{ id: "lagos-1", origin: "https://lagos-1.kilomita.com.ng" }],
+    fallback: false,
+    ticket: "k1.a.b",
+  };
+
+  it("answers the list as sent", async () => {
+    expect(await requestTestServers(true, answer(200, list))).toEqual(list);
+  });
+
+  it("tells a per-address limit apart from every other failure", async () => {
+    expect(await requestTestServers(true, answer(429, { error: "rate-limited" }))).toBe(
+      "rate-limited",
+    );
+    expect(await requestTestServers(true, answer(429, { error: "busy" }))).toBeNull();
+    expect(await requestTestServers(true, answer(503))).toBeNull();
+    expect(await requestTestServers(true, offline)).toBeNull();
+    expect(await requestTestServers(true, answer(200, { servers: "x" }))).toBeNull();
   });
 });
 

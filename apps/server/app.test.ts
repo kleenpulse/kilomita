@@ -109,6 +109,21 @@ describe("routes", () => {
     expect(response.headers.get("server-timing")).toMatch(/^app;dur=\d+(\.\d+)?$/);
   });
 
+  it("tells browsers never to sniff a type, on answers and refusals alike", async () => {
+    const { origin } = await serve();
+    for (const path of [
+      `/ping?t=${freshTicket()}`,
+      "/ping",
+      "/down?bytes=-1",
+      "/health",
+      "/nope",
+    ]) {
+      const response = await fetch(`${origin}${path}`);
+      await response.arrayBuffer();
+      expect(response.headers.get("x-content-type-options"), path).toBe("nosniff");
+    }
+  });
+
   it.each([0, 1, 1024 * 1024 + 1, MAX_DOWNLOAD_BYTES])("serves exactly %i bytes", async (bytes) => {
     const { origin } = await serve();
     const response = await fetch(`${origin}/down?bytes=${bytes}&t=${freshTicket()}`);

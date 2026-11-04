@@ -38,20 +38,39 @@ export default function PrivacyPage() {
             your IP address and approximate location; {APP_NAME} never reads them.
           </p>
           <p className="mt-2">
-            Our own server also receives your IP address with every request, as every website does.
-            After a test it can look up which network you are on from that address. In this version
-            no lookup service is connected, so nothing is detected, and we keep nothing from the
-            lookup.
+            Our website receives your IP address with every request, as every website does. It is
+            hosted by Vercel, a US company; our server code runs in Frankfurt, Germany. Like any
+            host, Vercel sees your IP address and keeps its own request logs. The lines our code
+            writes to those logs contain error codes only.
+          </p>
+          <p className="mt-2">
+            After a test our website can look up which network you are on from your IP address. In
+            this version no lookup service is connected, so nothing is detected, and we keep nothing
+            from the lookup.
           </p>
         </section>
 
         <section>
           <h2 className="text-lg font-semibold">What is stored</h2>
           <p className="mt-1">
-            Nothing from your test is stored on our servers unless you choose to share. Your browser
-            keeps your choices on your device: whether low-data mode is on, whether you agreed to
-            share results, and, for each result you share, a random secret that lets you delete it
-            later.
+            Without sharing, we keep only counts. After each test your browser tells us how it ended
+            (finished, stopped, or failed and why), whether low-data mode was on and which test
+            server it used, never its numbers. We add one to a counter for that hour and that day,
+            and keep nothing that links the count to you or your device. The{" "}
+            <a className="underline underline-offset-2" href="/status">
+              status page
+            </a>{" "}
+            shows these counts.
+          </p>
+          <p className="mt-2">
+            To limit abuse, we also count requests from each connection, under a scrambled code made
+            from your IP address with a random key that changes every day. Each count is deleted
+            within a day, when its hour or day is over.
+          </p>
+          <p className="mt-2">
+            Your browser keeps your choices on your device: whether low-data mode is on, whether you
+            agreed to share results, and, for each result you share, a random secret that lets you
+            delete it later.
           </p>
           <p className="mt-2">
             Before each test our server gives your browser a one-time test pass, and a ticket that

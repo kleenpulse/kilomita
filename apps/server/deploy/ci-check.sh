@@ -37,7 +37,16 @@ done
 [ -n "$ok" ] || { echo "server-image: /health never answered ok" >&2; exit 1; }
 code=$(curl -sk -o /dev/null -w '%{http_code}' https://localhost/ping)
 [ "$code" = 403 ] || { echo "server-image: /ping without a ticket gave $code, not 403" >&2; exit 1; }
-echo "server-image: health ok, ticketless ping refused"
+headers=$(curl -sk -D - -o /dev/null https://localhost/health | tr -d '\r')
+printf '%s\n' "$headers" | grep -qi '^strict-transport-security: max-age=31536000$' \
+  || { echo "server-image: no HSTS header" >&2; exit 1; }
+printf '%s\n' "$headers" | grep -qi '^x-content-type-options: nosniff$' \
+  || { echo "server-image: no nosniff header" >&2; exit 1; }
+if printf '%s\n' "$headers" | grep -qi '^server:'; then
+  echo "server-image: Caddy still names itself" >&2
+  exit 1
+fi
+echo "server-image: health ok, ticketless ping refused, HSTS and nosniff sent"
 
 network="${project}_default"
 gateway=$(docker network inspect "$network" -f '{{(index .IPAM.Config 0).Gateway}}')

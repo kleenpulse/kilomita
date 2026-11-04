@@ -1,5 +1,5 @@
 import { type Db, memoryDatabase, postgresDatabase } from "./db/database";
-import { logFailure } from "./http";
+import { log, logFailure } from "./http";
 import { type SaltStore, kvSaltStore } from "./ip-hash";
 import { type Kv, memoryKv, upstashKv } from "./kv";
 import { knownServerIds } from "../lib/test-servers";
@@ -32,18 +32,16 @@ type Env = Record<string, string | undefined>;
 /** Exported for tests; the app goes through getStores(). */
 export async function createStores(env: Env): Promise<Stores | null> {
   if (env.KILOMITA_STORES === "memory") {
-    console.warn(
-      "KILOMITA_STORES=memory: shared results live in this process and vanish on restart. Never use it in production.",
-    );
+    log("warn", "stores-memory", {
+      note: "KILOMITA_STORES=memory: shared results live in this process and vanish on restart. Never use it in production.",
+    });
     const kv = memoryKv();
     const db = await memoryDatabase();
     // Synthetic rows exist only here: no path writes them to a real database.
     const seeded = env.KILOMITA_SEED === "demo";
     if (seeded) {
       const { seedDemo } = await import("./db/seed");
-      console.warn(
-        `KILOMITA_SEED=demo: added ${String(await seedDemo(db, Date.now()))} synthetic results.`,
-      );
+      log("warn", "stores-seeded", { count: await seedDemo(db, Date.now()) });
     }
     return { db, kv, salt: kvSaltStore(kv), memory: true, seeded };
   }
@@ -82,7 +80,7 @@ const shared = globalThis as { [STORES]?: Promise<Stores | null> | undefined };
 export function getStores(env: Env = process.env): Promise<Stores | null> {
   shared[STORES] ??= createStores(env).catch((error: unknown) => {
     shared[STORES] = undefined;
-    logFailure("Starting the sharing stores", error);
+    logFailure("stores-start", error);
     return null;
   });
   return shared[STORES];

@@ -6,7 +6,7 @@ KiloMita is a light, honest internet speed test built for Nigeria. One tap shows
 
 [![License: AGPL-3.0](https://img.shields.io/badge/license-AGPL--3.0-blue.svg)](LICENSE)
 
-> **Status:** the speed test, sharing, the public dashboard, KiloMita's own test server, share cards and the installable app are built (phases 0–6). It is not deployed yet: a Lagos test server still has to be set up. See [CLAUDE.md](CLAUDE.md) for the phase plan and the open launch items.
+> **Status:** every phase is built (0–7): the speed test, sharing, the public dashboard, KiloMita's own test server, share cards, the installable app, and production hardening (security headers, rate limits, a public status page, a performance budget in CI). The production deployment and the launch items in [docs/backlog.md](docs/backlog.md) are next.
 
 ## What it does
 
@@ -59,6 +59,7 @@ Sharing and the dashboard work without any service: set `KILOMITA_STORES=memory`
 | `bun run test`       | Unit tests (Vitest)                                                                           |
 | `bun run test:e2e`   | End-to-end tests (Playwright). Run `bun --filter @kilomita/web playwright:install` once first |
 | `bun run licenses`   | Check every dependency's licence is AGPL-3.0-compatible                                       |
+| `bun run audit`      | Fail on any high or critical security advisory in the dependencies                            |
 | `bun run tripwire`   | Scan the repo for known malware markers                                                       |
 
 The end-to-end tests never reach a real test server: they answer every speed test request from mocks, and the browser can't resolve any other hostname.
@@ -75,11 +76,12 @@ packages/shared             Zod schemas, types and constants: states, ISPs, bran
 packages/eslint-config      Shared ESLint presets (@kilomita/eslint-config)
 packages/typescript-config  Shared tsconfig presets (@kilomita/typescript-config)
 scripts                     Repo tooling: licence check, tripwire, load test (@kilomita/scripts)
+docs                        Architecture, runbook, backlog and the NDPA checklist
 ```
 
 ## Privacy
 
-KiloMita is designed around the Nigeria Data Protection Act 2023. Nothing from a test is stored unless you choose to share it. KiloMita never stores your IP address, and its test servers keep no record of it. You can delete what you shared from the privacy page. The [privacy page](apps/web/app/privacy/page.tsx) describes exactly what is kept and published, including the limits of what rounding and minimum group sizes protect.
+KiloMita is designed around the Nigeria Data Protection Act 2023. Unless you choose to share, KiloMita keeps only counts of how tests ended, never their numbers, plus short-lived rate-limit counters. It never stores your IP address with a result, and its test servers keep no record of it. You can delete what you shared from the privacy page. The [privacy page](apps/web/app/privacy/page.tsx) describes exactly what is kept and published, including the limits of what rounding and minimum group sizes protect. How it maps onto the Act is in [docs/ndpa-checklist.md](docs/ndpa-checklist.md); how the parts fit together is in [docs/architecture.md](docs/architecture.md), and how to run it in [docs/runbook.md](docs/runbook.md).
 
 ## Contributing
 
@@ -88,3 +90,5 @@ Contributions are welcome. Please read [CONTRIBUTING.md](CONTRIBUTING.md) and th
 ## License
 
 KiloMita is free software, licensed under the [GNU Affero General Public License v3.0 only](LICENSE). If you run a modified version of KiloMita as a network service, the AGPL requires you to offer its source code to your users.
+
+The published numbers (the dashboard and `/api/stats`) are licensed under [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/): reuse them freely, crediting KiloMita.

@@ -13,6 +13,10 @@ export const OFFLINE_MESSAGE = "You're offline. The test needs an internet conne
 /** The page couldn't get its server list, so no test traffic was sent. */
 export const UNREACHABLE_MESSAGE = "Couldn't reach KiloMita. Check your connection.";
 
+/** This connection's address started too many tests this hour or day (per-address limits). */
+export const RATE_LIMITED_MESSAGE =
+  "Too many tests from your connection right now. Please try again later.";
+
 // "Later", not "in a few minutes": a server out of its day's budget is back only the next day.
 export const NO_SERVER_MESSAGE = "No test server is reachable right now. Try again later.";
 

@@ -5,6 +5,7 @@ import {
   SubmitResultSchema,
 } from "@kilomita/shared";
 import { and, eq, gt, inArray } from "drizzle-orm";
+import { ADDRESS_LIMITS, limitContext, withinAddressLimit } from "./address-limits";
 import { clientIp } from "./client-ip";
 import { results } from "./db/schema";
 import { json, readJson, unavailable } from "./http";
@@ -47,6 +48,15 @@ export async function handleSubmit(request: Request, deps: SharingDeps): Promise
   if (impossible) return reply(422, { error: impossible });
 
   const ip = clientIp(request.headers, trustedHeader);
+  // After the checks a forger can't pass cheaply, before anything is stored. Never counted for
+  // /status: an exact count of shares would undo the published count bands.
+  const sharesAllowed = await withinAddressLimit(
+    limitContext(stores, ip, time),
+    "shares",
+    ADDRESS_LIMITS.sharesPerDay,
+    "day",
+  );
+  if (!sharesAllowed) return reply(429, { error: "rate-limited" });
   const ipHash = ip === null ? null : hashIpPrefix(ip, await salt.saltForToday());
   const duplicate =
     ipHash !== null &&
@@ -122,7 +132,7 @@ const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 export async function handleCorrect(
   request: Request,
   id: string,
-  { stores, now }: SharingDeps,
+  { stores, now, trustedHeader }: SharingDeps,
 ): Promise<Response> {
   if (!stores) return unavailable();
   const { db, kv, memory } = stores;
@@ -133,6 +143,14 @@ export async function handleCorrect(
   const parsed = CorrectResultSchema.safeParse(body.value);
   if (!parsed.success) return reply(400, { error: "invalid" });
   if (!UUID.test(id)) return reply(404, { error: "not-found" });
+  // Counted before the SELECT, so a stranger probing ids pays for each query in its own limit.
+  const correctionsAllowed = await withinAddressLimit(
+    limitContext(stores, clientIp(request.headers, trustedHeader), time),
+    "corrections",
+    ADDRESS_LIMITS.correctionsPerMinute,
+    "minute",
+  );
+  if (!correctionsAllowed) return reply(429, { error: "rate-limited" });
 
   const owned = and(
     eq(results.id, id),

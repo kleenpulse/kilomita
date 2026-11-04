@@ -10,7 +10,29 @@ const LOCAL_HOSTS = new Set(["localhost", "127.0.0.1"]);
  * priority), lets this machine through and aborts and records everything else. DNS fails for every
  * hostname anyway (playwright.config.ts); this also covers IP literals, which skip DNS.
  */
-export const test = base.extend<{ unrouted: string[] }>({
+export const test = base.extend<{ unrouted: string[]; cspViolations: string[] }>({
+  /**
+   * The CSP watch: every page reports each Content-Security-Policy violation through a binding
+   * (which survives navigation), and any test that saw one fails. A blocked Worker shows up as a
+   * failed run instead: its violations fire in the Worker, where no init script runs.
+   */
+  cspViolations: [
+    async ({ context }, use) => {
+      const violations: string[] = [];
+      await context.exposeBinding("__kilomitaCsp", (_source, report: string) => {
+        violations.push(report);
+      });
+      await context.addInitScript(() => {
+        document.addEventListener("securitypolicyviolation", (event) => {
+          const report = `${event.violatedDirective} ${event.blockedURI} on ${location.pathname}`;
+          (window as unknown as { __kilomitaCsp: (r: string) => void }).__kilomitaCsp(report);
+        });
+      });
+      await use(violations);
+      expect(violations, "Content-Security-Policy violations").toEqual([]);
+    },
+    { auto: true },
+  ],
   unrouted: [
     async ({ context }, use) => {
       const unrouted: string[] = [];

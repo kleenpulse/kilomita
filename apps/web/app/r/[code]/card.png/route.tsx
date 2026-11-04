@@ -1,6 +1,7 @@
 import { ImageResponse } from "next/og";
 import { APP_NAME, TAGLINE } from "@kilomita/shared";
 import { decodeShareCode } from "@/lib/share-code";
+import { cardRenderAllowed } from "@/server/card-limit";
 import { NOT_CHECKED, cardText } from "../card";
 
 /*
@@ -25,11 +26,17 @@ function Stat({ label, value, unit }: { label: string; value: string; unit: stri
   );
 }
 
-export async function GET(_request: Request, { params }: { params: Promise<{ code: string }> }) {
+export async function GET(request: Request, { params }: { params: Promise<{ code: string }> }) {
   const { code } = await params;
   const card = decodeShareCode(code, Date.now());
   if (!card) {
     return new Response("Not found", { status: 404, headers: { "cache-control": "no-store" } });
+  }
+  if (!(await cardRenderAllowed(request))) {
+    return new Response("Too many requests", {
+      status: 429,
+      headers: { "cache-control": "no-store", "retry-after": "60" },
+    });
   }
   const text = cardText(card);
   return new ImageResponse(
@@ -72,7 +79,12 @@ export async function GET(_request: Request, { params }: { params: Promise<{ cod
     {
       width: 1200,
       height: 630,
-      headers: { "cache-control": "public, max-age=31536000, immutable" },
+      headers: {
+        "cache-control": "public, max-age=31536000, immutable",
+        // Vercel's CDN keeps a Function's answer only with s-maxage or a targeted header like this
+        // one, which browsers and other CDNs never see (Vercel docs, "CDN cache", read 2026-11-04).
+        "vercel-cdn-cache-control": "max-age=31536000",
+      },
     },
   );
 }

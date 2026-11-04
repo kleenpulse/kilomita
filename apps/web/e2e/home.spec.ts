@@ -21,7 +21,31 @@ test("launches the browser with every hostname but localhost fenced off", () => 
   );
 });
 
-test("records and refuses a request to a host no mock answers", async ({ page, unrouted }) => {
+test.describe("the route fence, without the page's CSP in front of it", () => {
+  // Since Phase 7 the page's connect-src 'self' refuses this fetch first (the test below). The
+  // fence still guards the Worker, which the page's CSP doesn't cover, so prove it on its own.
+  test.use({ bypassCSP: true });
+
+  test("records and refuses a request to a host no mock answers", async ({ page, unrouted }) => {
+    await page.goto("/");
+    const outcome = await page.evaluate(() =>
+      fetch("http://203.0.113.9/").then(
+        () => "answered",
+        () => "refused",
+      ),
+    );
+    expect(outcome).toBe("refused");
+    expect(unrouted).toEqual(["http://203.0.113.9"]);
+    // The fixture would fail this test for it; it was expected here.
+    unrouted.length = 0;
+  });
+});
+
+test("the page's CSP refuses a foreign fetch before it leaves the page", async ({
+  page,
+  unrouted,
+  cspViolations,
+}) => {
   await page.goto("/");
   const outcome = await page.evaluate(() =>
     fetch("http://203.0.113.9/").then(
@@ -30,9 +54,10 @@ test("records and refuses a request to a host no mock answers", async ({ page, u
     ),
   );
   expect(outcome).toBe("refused");
-  expect(unrouted).toEqual(["http://203.0.113.9"]);
-  // The fixture would fail this test for it; it was expected here.
-  unrouted.length = 0;
+  expect(unrouted).toEqual([]);
+  await expect.poll(() => cspViolations).toEqual(["connect-src http://203.0.113.9/ on /"]);
+  // The CSP watch would fail this test for it; it was expected here.
+  cspViolations.length = 0;
 });
 
 test("links to the privacy page and back", async ({ page }) => {
@@ -40,8 +65,20 @@ test("links to the privacy page and back", async ({ page }) => {
   await page.getByRole("link", { name: "Privacy" }).click();
   await expect(page).toHaveURL(/\/privacy$/);
   await expect(page.getByRole("heading", { level: 1 })).toHaveText("Privacy");
-  await expect(page.getByText(/Nothing from your test is stored on our servers/)).toBeVisible();
+  // Phase 7: tests are counted (how they ended) even without sharing, so the old claim is gone.
+  await expect(page.getByText(/Nothing from your test is stored/)).toHaveCount(0);
+  await expect(page.getByText(/Without sharing, we keep only counts/)).toBeVisible();
+  await expect(page.getByText(/never its numbers/)).toBeVisible();
+  await expect(
+    page.getByText(/count requests from each connection, under a scrambled code/),
+  ).toBeVisible();
+  await expect(page.getByText(/Each count is deleted within a day/)).toBeVisible();
   await expect(page.getByText(/receives your IP address with every request/)).toBeVisible();
+  await expect(page.getByText(/hosted by Vercel, a US company/)).toBeVisible();
+  await expect(page.getByText(/keeps its own request logs/)).toBeVisible();
+  await expect(
+    page.getByText(/The lines our code writes to those logs contain error codes only/),
+  ).toBeVisible();
   // An IPv6 /48 can be one home or office: the page must not claim the code never identifies.
   await expect(page.getByText(/can belong to a single home or office/)).toBeVisible();
   // The NDPA notice lists everything a shared result keeps, its time included.

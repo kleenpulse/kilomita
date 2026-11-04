@@ -52,8 +52,8 @@ test("the leaderboard ranks providers, shares places and hides small groups", as
   expect(await robots(page)).toBeNull();
   const [dataset] = await jsonLd(page);
   expect(dataset).toMatchObject({ "@type": "Dataset", spatialCoverage: { name: "Nigeria" } });
-  // No data licence has been chosen.
-  expect(dataset).not.toHaveProperty("license");
+  // The aggregates are CC BY 4.0.
+  expect(dataset).toHaveProperty("license", "https://creativecommons.org/licenses/by/4.0/");
   expect(await layoutShifts(page)).toEqual([]);
 });
 
@@ -234,6 +234,7 @@ test("every page links to its source code (AGPL)", async ({ page }) => {
     "/states",
     "/states/lagos",
     "/methodology",
+    "/status",
   ]) {
     await page.goto(path);
     await expect(page.getByRole("link", { name: "Source code" }), path).toHaveAttribute(
@@ -241,6 +242,28 @@ test("every page links to its source code (AGPL)", async ({ page }) => {
       SOURCE_URL,
     );
   }
+});
+
+test("the methodology page says the numbers are CC BY 4.0", async ({ page }) => {
+  await page.goto("/methodology");
+  const link = page.getByRole("link", { name: "CC BY 4.0" });
+  await expect(link).toHaveAttribute("href", "https://creativecommons.org/licenses/by/4.0/");
+  await expect(page.getByText(/as long as you credit KiloMita/)).toBeVisible();
+});
+
+test("/status shows counts only, never shared results, and is not indexed", async ({ page }) => {
+  await page.goto("/status");
+  await expect(page.getByRole("heading", { level: 1 })).toHaveText("Status");
+  expect(await robots(page)).toContain("noindex");
+  await expect(page.getByText(/Reported by browsers, not checked by us/)).toBeVisible();
+  await expect(page.getByText(/Shared results are never counted on this page/)).toBeVisible();
+  // F1: an exact count of shares would undo the count bands. No figure next to "share" anywhere.
+  const text = (await page.locator("main").innerText()).replace(
+    "Shared results are never counted on this page.",
+    "",
+  );
+  expect(text).not.toMatch(/shar/i);
+  await expect(page.getByRole("link", { name: "Status" })).toHaveAttribute("href", "/status");
 });
 
 test("privacy and methodology describe the rounding honestly", async ({ page }) => {

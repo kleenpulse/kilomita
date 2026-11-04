@@ -13,10 +13,12 @@ import {
   LEFT_PAGE_MESSAGE,
   NO_SERVER_MESSAGE,
   OFFLINE_MESSAGE,
+  RATE_LIMITED_MESSAGE,
   UNREACHABLE_MESSAGE,
   UPDATED_MESSAGE,
   errorMessage,
 } from "@/lib/messages";
+import { outcomeReport, sendOutcome } from "@/lib/outcome";
 import { type Run, type RunOutcome, startRun } from "@/lib/run-in-worker";
 import {
   type NetworkSelection,
@@ -233,6 +235,9 @@ export function SpeedTest() {
       run.current = current;
       lastRun.current = current;
       void current.outcome.then((outcome) => {
+        // Once per run, after it has ended, whatever the page shows next.
+        const report = outcomeReport(outcome, lowData, !navigator.onLine);
+        if (report) sendOutcome(report);
         if (run.current !== current) return;
         run.current = null;
         if (outcome.status === "stopped" && outcome.reason === "unmount") return;
@@ -269,7 +274,11 @@ export function SpeedTest() {
       if (attempt.current !== mine) return;
       if (servers === null) {
         setView(alertView(navigator.onLine ? UNREACHABLE_MESSAGE : OFFLINE_MESSAGE, 0));
+      } else if (servers === "rate-limited") {
+        setView(alertView(RATE_LIMITED_MESSAGE, 0));
       } else if ((servers.ticket === null || servers.servers.length === 0) && !servers.fallback) {
+        // A run was handed out but has nowhere to go: count it, so starts and outcomes add up.
+        sendOutcome({ outcome: "no-server", lowData, serverId: null });
         setView(alertView(NO_SERVER_MESSAGE, 0));
       } else {
         measure(held, servers);

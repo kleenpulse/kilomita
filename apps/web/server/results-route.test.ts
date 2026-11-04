@@ -1,7 +1,8 @@
 import { ENGINE_VERSION } from "@kilomita/engine";
 import { SHARING } from "@kilomita/shared";
 import { eq } from "drizzle-orm";
-import { beforeEach, describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
+import { ADDRESS_LIMITS } from "./address-limits";
 import { results } from "./db/schema";
 import { GENUINE_RESULT } from "./fixtures";
 import { LIMITS } from "./limits";
@@ -207,6 +208,34 @@ describe("POST /api/results", () => {
     const real = await submit({ token: token(), secret: secret(), result: GENUINE_RESULT });
     expect(real.headers.get("x-kilomita-stores")).toBeNull();
   });
+
+  it("takes at most sharesPerDay shares a UTC day from one address", async () => {
+    const from = (ip: string) =>
+      submit({ token: token(), secret: secret(), result: GENUINE_RESULT }, { "x-real-ip": ip });
+    for (let i = 0; i < ADDRESS_LIMITS.sharesPerDay; i++) {
+      expect((await from("102.88.85.10")).status).toBe(201);
+    }
+    const refused = await from("102.88.85.10");
+    expect(refused.status).toBe(429);
+    expect(await refused.json()).toEqual({ error: "rate-limited" });
+    expect(await rows()).toHaveLength(ADDRESS_LIMITS.sharesPerDay);
+    expect((await from("102.88.85.11")).status).toBe(201);
+    // A new UTC day starts from zero.
+    time = Date.UTC(2026, 10, 3, 0, 1);
+    expect((await from("102.88.85.10")).status).toBe(201);
+  });
+
+  it("applies no share limit without a trusted header", async () => {
+    const untrusted = { ...deps, trustedHeader: undefined };
+    for (let i = 0; i <= ADDRESS_LIMITS.sharesPerDay; i++) {
+      const response = await submit(
+        { token: token(), secret: secret(), result: GENUINE_RESULT },
+        { "x-real-ip": "102.88.85.10" },
+        untrusted,
+      );
+      expect(response.status).toBe(201);
+    }
+  });
 });
 
 async function shared(): Promise<{ id: string; owner: string }> {
@@ -254,6 +283,28 @@ describe("PATCH /api/results/:id", () => {
       expect((await correct(id, { secret: owner, networkType: "4g" })).status).toBe(200);
     }
     expect((await correct(id, { secret: owner, networkType: "4g" })).status).toBe(429);
+  });
+
+  it("counts a stranger's probes per address before any query", async () => {
+    const select = vi.spyOn(stores.db, "select");
+    const probe = (ip: string) =>
+      handleCorrect(
+        jsonRequest(
+          "PATCH",
+          "/api/results/00000000-0000-4000-8000-000000000000",
+          { secret: secret(), ispSlug: "glo" },
+          { "x-real-ip": ip },
+        ),
+        "00000000-0000-4000-8000-000000000000",
+        deps,
+      );
+    for (let i = 0; i < ADDRESS_LIMITS.correctionsPerMinute; i++) {
+      expect((await probe("203.0.113.9")).status).toBe(404);
+    }
+    expect(select).toHaveBeenCalledTimes(ADDRESS_LIMITS.correctionsPerMinute);
+    expect((await probe("203.0.113.9")).status).toBe(429);
+    expect(select).toHaveBeenCalledTimes(ADDRESS_LIMITS.correctionsPerMinute);
+    expect((await probe("203.0.113.10")).status).toBe(404);
   });
 });
 

@@ -12,10 +12,13 @@ export function JsonLd({ data }: { data: Record<string, unknown> }) {
   );
 }
 
-/**
- * A schema.org Dataset for a page of aggregates. No `license`: the maintainer hasn't chosen a
- * data licence yet.
- */
+/** The published aggregates are CC BY 4.0 (maintainer, 2026-11-04). */
+export const DATA_LICENSE = Object.freeze({
+  name: "CC BY 4.0",
+  url: "https://creativecommons.org/licenses/by/4.0/",
+});
+
+/** A schema.org Dataset for a page of aggregates. */
 export function datasetLd({
   name,
   description,
@@ -38,6 +41,7 @@ export function datasetLd({
     description,
     url: `${SITE_URL}${path}`,
     isAccessibleForFree: true,
+    license: DATA_LICENSE.url,
     creator: { "@type": "Organization", name: APP_NAME, url: SITE_URL },
     spatialCoverage: { "@type": "Place", name: "Nigeria" },
     temporalCoverage: `${start.toISOString().slice(0, 10)}/${end.toISOString().slice(0, 10)}`,

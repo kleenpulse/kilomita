@@ -73,6 +73,7 @@ jobs:
           node-version-file: .node-version
       - run: bun install --frozen-lockfile
       - run: bun run licenses
+      - run: bun run audit
       - run: bun run typecheck
       - run: bun run lint
       - run: bun run format:check

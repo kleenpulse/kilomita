@@ -28,8 +28,8 @@ A VM with IPv6, a 1 Gbps port and peering at IXPN Lagos (the exchange Nigerian I
 ## Before you start
 
 - A Linux VM (Ubuntu 24.04 LTS) with a public IPv4 address, ideally IPv6 too, and SSH access.
-- A DNS name for it, such as `lagos-1.example.ng`, with an `A` record (and `AAAA` for IPv6) pointing at the VM.
-- The KiloMita web app's origin (for example `https://kilomita.example`) and its `KILOMITA_SERVER_TICKET_SECRET`. The server and the web app must have the same value.
+- A DNS name for it, such as `lagos-1.kilomita.com.ng`, with an `A` record (and `AAAA` for IPv6) pointing at the VM.
+- The KiloMita web app's origin (for example `https://kilomita.com.ng`) and its `KILOMITA_SERVER_TICKET_SECRET`. The server and the web app must have the same value.
 
 ## Steps
 
@@ -38,14 +38,19 @@ A VM with IPv6, a 1 Gbps port and peering at IXPN Lagos (the exchange Nigerian I
    sudo ufw allow 22/tcp && sudo ufw allow 80/tcp && sudo ufw allow 443/tcp && sudo ufw allow 443/udp && sudo ufw enable
    ```
 2. **Docker.** Install Docker Engine and the Compose plugin from Docker's own instructions: <https://docs.docker.com/engine/install/ubuntu/>.
-3. **The code.** Clone the repository and check out a reviewed commit:
+3. **The code.** Clone the repository and check out the **full SHA of a reviewed commit**, never a branch name: a branch can be force-pushed between review and deploy.
    ```sh
-   git clone https://github.com/kleenpulse/kilomita.git && cd kilomita/apps/server/deploy
+   git clone https://github.com/kleenpulse/kilomita.git && cd kilomita
+   git checkout --detach <full reviewed SHA>
+   git rev-parse HEAD
+   sh scripts/tripwire.sh
+   cd apps/server/deploy
    ```
+   `git rev-parse HEAD` must print exactly the SHA you were given, and the tripwire must report the tree clean (exit 0). If either doesn't, stop.
 4. **Settings.** Create `.env` in this folder (it is git-ignored; never commit it):
    ```sh
-   KILOMITA_SERVER_HOST=lagos-1.example.ng
-   KILOMITA_SERVER_ORIGINS=https://kilomita.example
+   KILOMITA_SERVER_HOST=lagos-1.kilomita.com.ng
+   KILOMITA_SERVER_ORIGINS=https://kilomita.com.ng
    KILOMITA_SERVER_TICKET_SECRET=<the web app's value>
    KILOMITA_EGRESS_BUDGET_GB=900
    ```
@@ -54,17 +59,31 @@ A VM with IPv6, a 1 Gbps port and peering at IXPN Lagos (the exchange Nigerian I
    ```sh
    docker compose up -d --build
    ```
-6. **Check.** `curl https://lagos-1.example.ng/health` should print `{"status":"ok"}` (`over-daily` or `over-budget` when the budget is used up). `curl -i https://lagos-1.example.ng/ping` should answer **403**: no ticket, no test.
-7. **Connect the web app.** On the web app, set `KILOMITA_TEST_SERVERS=lagos-1=https://lagos-1.example.ng` (and the ticket secret), restart it, and run a test. The result's server is `lagos-1`.
+6. **Check.** `curl https://lagos-1.kilomita.com.ng/health` should print `{"status":"ok"}` (`over-daily` or `over-budget` when the budget is used up). `curl -i https://lagos-1.kilomita.com.ng/ping` should answer **403**: no ticket, no test.
+7. **Connect the web app.** On the web app, set `KILOMITA_TEST_SERVERS=lagos-1=https://lagos-1.kilomita.com.ng` (and the ticket secret), restart it, and run a test. The result's server is `lagos-1`.
 
 ## Running it
 
-- **Updates:** `git pull` (check the incoming commits first), then `docker compose up -d --build`.
+- **Updates:** `git fetch`, then step 3's `git checkout --detach <full reviewed SHA>`, `git rev-parse HEAD` and the tripwire, then `docker compose up -d --build` in `apps/server/deploy`. More in `docs/runbook.md`.
 - **Budget alert:** also set your provider's usage alert at about 80% of the allowance, as a second guard.
 - **Logs:** `docker compose logs` shows errors and certificate messages, rotated at 3 × 10 MB per container. They hold no client addresses. **Never add a `log` directive** to the site in `Caddyfile`: that turns on access logs, which record every visitor's address.
 - **The budget counter** lives in the `server-state` volume (`/data/egress.json`) and survives restarts.
 
+## The web app on Vercel
+
+The web app (`apps/web`) runs on Vercel, with its functions in Frankfurt next to Neon and Upstash (`apps/web/vercel.json`).
+
+1. **Project.** In Vercel, import `kleenpulse/kilomita`, set the root directory to `apps/web` and keep the detected framework (Next.js). Vercel installs with Bun from the committed `bun.lock`.
+2. **Environment variables.** Set every variable in `docs/runbook.md` ("Vercel environment variables") on the **Production** target only. Give **Preview** `KILOMITA_STORES=memory`, `KILOMITA_SEED=demo` and throwaway secrets, so a branch build never reaches real data.
+3. **Domain.** Add `kilomita.com.ng` to the project and point its DNS at Vercel as the dashboard says. Add `lagos-1.kilomita.com.ng` as an `A` (and `AAAA`) record to the test server's VM.
+4. **Deploy** by merging to `main`. Then check, as in the runbook:
+   - the production deployment's commit SHA equals `main`
+   - pages carry `content-security-policy` and `strict-transport-security`
+   - a file under `/_next/static/` carries **no** CSP (otherwise the speed test's Worker can't reach the test server)
+   - one low-data test on the live site completes against `lagos-1`
+5. **Uptime.** Set the repository variables `KILOMITA_WEB_URL` and `KILOMITA_SERVER_URLS` (Settings, Secrets and variables, Actions, Variables), then run the `Uptime` workflow once by hand.
+
 ## Known limits
 
-- The budget is the only guard against abuse. A script that requests tickets from the web app can still use up one day's share; per-client limits are a later step.
+- Abuse is limited by the budget's daily slice, and per address by the web app when `CLIENT_IP_HEADER` is set (`x-real-ip` on Vercel): 60 runs an hour and 300 a day per IPv4 address or IPv6 /64, 10 times that per IPv6 /48. Someone with several addresses can still use up one day's share.
 - Run tickets expire two minutes after they are issued.

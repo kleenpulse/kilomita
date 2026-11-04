@@ -1,5 +1,8 @@
 import { randomBytes } from "node:crypto";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { ADDRESS_LIMITS } from "./address-limits";
+import { kvSaltStore } from "./ip-hash";
+import { type Kv, memoryKv } from "./kv";
 import { jsonRequest } from "./testing";
 import { MinuteGuard, TICKETS_PER_MINUTE, testServerSetup } from "./test-servers";
 import { handleTestServers, type TestServerDeps } from "./test-servers-route";
@@ -14,6 +17,8 @@ function deps(overrides: Partial<TestServerDeps> = {}): TestServerDeps {
     key: new Uint8Array(randomBytes(32)),
     guard: new MinuteGuard(TICKETS_PER_MINUTE),
     now: () => NOW,
+    stores: null,
+    trustedHeader: undefined,
     ...overrides,
   };
 }
@@ -66,6 +71,55 @@ describe("POST /api/test-servers", () => {
       200,
     );
   });
+
+  describe("per address, with CLIENT_IP_HEADER", () => {
+    const fixedSalt = { saltForToday: () => Promise.resolve(new Uint8Array(32).fill(3)) };
+    const from = (ip: string) =>
+      jsonRequest("POST", "/api/test-servers", { lowData: true }, { "x-real-ip": ip });
+
+    it("hands out runsPerHour tickets an hour to one address, then 429", async () => {
+      const recorded: string[] = [];
+      const d = deps({
+        stores: { kv: memoryKv(() => NOW), salt: fixedSalt },
+        trustedHeader: "x-real-ip",
+        record: (fields) => recorded.push(...fields),
+      });
+      for (let i = 0; i < ADDRESS_LIMITS.runsPerHour; i++) {
+        expect((await handleTestServers(from("102.88.34.10"), d)).status).toBe(200);
+      }
+      const refused = await handleTestServers(from("102.88.34.10"), d);
+      expect(refused.status).toBe(429);
+      expect(await refused.json()).toEqual({ error: "rate-limited" });
+      expect((await handleTestServers(from("102.88.34.99"), d)).status).toBe(200);
+      expect(recorded.filter((f) => f === "start:low")).toHaveLength(
+        ADDRESS_LIMITS.runsPerHour + 1,
+      );
+      expect(recorded.filter((f) => f === "limited:servers")).toHaveLength(1);
+    });
+
+    it("still answers servers and a ticket when every Redis call fails", async () => {
+      vi.spyOn(console, "warn").mockImplementation(() => undefined);
+      const down = () => Promise.reject(new Error("redis down"));
+      const broken: Kv = {
+        setIfAbsent: down,
+        get: down,
+        countInWindow: down,
+        incrementFields: down,
+        readFields: down,
+      };
+      const response = await handleTestServers(
+        from("102.88.34.10"),
+        deps({
+          stores: { kv: broken, salt: kvSaltStore(broken) },
+          trustedHeader: "x-real-ip",
+        }),
+      );
+      expect(response.status).toBe(200);
+      const body = (await response.json()) as { servers: unknown; ticket: unknown };
+      expect(body.servers).toEqual(servers);
+      expect(body.ticket).toMatch(/^k1\./);
+    });
+  });
 });
 
 describe("testServerSetup", () => {
@@ -89,8 +143,11 @@ describe("testServerSetup", () => {
       NODE_ENV: "production",
     });
     expect(setup.key).toBeNull();
-    expect(warn.mock.calls.map((call) => String(call[0]))).toEqual([
-      "KILOMITA_SERVER_TICKET_SECRET is missing or malformed: own test servers are off.",
+    expect(warn.mock.calls.map((call) => JSON.parse(String(call[0])) as unknown)).toEqual([
+      expect.objectContaining({
+        event: "ticket-secret-missing",
+        note: "KILOMITA_SERVER_TICKET_SECRET is missing or malformed: own test servers are off.",
+      }),
     ]);
   });
 });

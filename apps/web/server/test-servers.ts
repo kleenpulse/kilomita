@@ -1,4 +1,5 @@
 import { type TestServerConfig, parseTestServers } from "../lib/test-servers";
+import { log } from "./http";
 import { tokenKey } from "./token";
 
 /** Ticket requests allowed per minute per process: a CPU guard far above real traffic, not a
@@ -58,11 +59,11 @@ export function testServerSetup(env: Env = process.env): TestServerSetup {
 
   const config = parseTestServers(env);
   const key = tokenKey(env.KILOMITA_SERVER_TICKET_SECRET);
-  for (const warning of config.warnings) console.warn(warning);
+  for (const warning of config.warnings) log("warn", "test-servers-config", { note: warning });
   if (config.servers.length > 0 && !key) {
-    console.warn(
-      "KILOMITA_SERVER_TICKET_SECRET is missing or malformed: own test servers are off.",
-    );
+    log("warn", "ticket-secret-missing", {
+      note: "KILOMITA_SERVER_TICKET_SECRET is missing or malformed: own test servers are off.",
+    });
   }
   const setup = { config, key };
   shared[SETUP] = { raw, setup };

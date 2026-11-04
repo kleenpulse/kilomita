@@ -131,6 +131,8 @@ test("the card page shows the shared numbers, isn't indexed and calls no API", a
   expect(png.status()).toBe(200);
   expect(png.headers()["content-type"]).toBe("image/png");
   expect(png.headers()["cache-control"]).toBe("public, max-age=31536000, immutable");
+  // Vercel's CDN keeps a Function's answer only with s-maxage or a targeted header (Phase 7).
+  expect(png.headers()["vercel-cdn-cache-control"]).toBe("max-age=31536000");
   const bytes = await png.body();
   // PNG IHDR: width and height, big-endian, at bytes 16-23.
   expect([bytes.readUInt32BE(16), bytes.readUInt32BE(20)]).toEqual([1200, 630]);

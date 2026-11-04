@@ -21,6 +21,17 @@ describe("memoryKv", () => {
     time = 60_000;
     expect(await kv.countInWindow("c", 120_000)).toBe(1);
   });
+
+  it("counts hash fields until the hash expires", async () => {
+    let time = 0;
+    const kv = memoryKv(() => time);
+    expect(await kv.readFields("h")).toEqual({});
+    await kv.incrementFields("h", ["a", "b"], 1_000);
+    await kv.incrementFields("h", ["a"], 1_000);
+    expect(await kv.readFields("h")).toEqual({ a: 2, b: 1 });
+    time = 1_000;
+    expect(await kv.readFields("h")).toEqual({});
+  });
 });
 
 describe("upstashKv", () => {
@@ -29,6 +40,10 @@ describe("upstashKv", () => {
     const pipeline = {
       incr(...args: unknown[]) {
         calls.push(["incr", ...args]);
+        return pipeline;
+      },
+      hincrby(...args: unknown[]) {
+        calls.push(["hincrby", ...args]);
         return pipeline;
       },
       pexpireat(...args: unknown[]) {
@@ -50,6 +65,10 @@ describe("upstashKv", () => {
         return Promise.resolve(args[0] === "missing" ? null : "value");
       },
       pipeline: () => pipeline,
+      hgetall: (...args: unknown[]) => {
+        calls.push(["hgetall", ...args]);
+        return Promise.resolve(args[0] === "missing" ? null : { a: "3", b: "1" });
+      },
     };
     return { calls, kv: upstashKv(redis as unknown as UpstashClient) };
   }
@@ -74,5 +93,28 @@ describe("upstashKv", () => {
     const { calls, kv } = fakeRedis();
     expect(await kv.countInWindow("c", 60_000)).toBe(7);
     expect(calls).toEqual([["incr", "c"], ["pexpireat", "c", 60_000], ["exec"]]);
+  });
+
+  it("increments every field and sets the expiry in one round trip", async () => {
+    const { calls, kv } = fakeRedis();
+    await kv.incrementFields("h", ["a", "b"], 9_000);
+    expect(calls).toEqual([
+      ["hincrby", "h", "a", 1],
+      ["hincrby", "h", "b", 1],
+      ["pexpireat", "h", 9_000],
+      ["exec"],
+    ]);
+  });
+
+  it("sends nothing when there is no field to count", async () => {
+    const { calls, kv } = fakeRedis();
+    await kv.incrementFields("h", [], 9_000);
+    expect(calls).toEqual([]);
+  });
+
+  it("reads the string counts back as numbers, and nothing for a missing hash", async () => {
+    const { kv } = fakeRedis();
+    expect(await kv.readFields("there")).toEqual({ a: 3, b: 1 });
+    expect(await kv.readFields("missing")).toEqual({});
   });
 });

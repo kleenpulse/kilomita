@@ -82,13 +82,24 @@ function isRunServers(value: unknown): value is RunServers {
   );
 }
 
-/** Asked for after Start, alongside the token. null if it can't be had: the run can't start. */
+/**
+ * Asked for after Start, alongside the token. null if it can't be had, "rate-limited" if this
+ * connection has started too many tests lately: either way the run can't start.
+ */
 export async function requestTestServers(
   lowData: boolean,
   fetchFn: FetchFn = browserFetch,
   timeoutMs = 3_000,
-): Promise<RunServers | null> {
+): Promise<RunServers | "rate-limited" | null> {
   const response = await send(fetchFn, "/api/test-servers", "POST", { lowData }, timeoutMs);
+  if (response?.status === 429) {
+    try {
+      const { error } = (await response.json()) as { error?: unknown };
+      return error === "rate-limited" ? "rate-limited" : null;
+    } catch {
+      return null;
+    }
+  }
   if (!response?.ok) return null;
   try {
     const body: unknown = await response.json();

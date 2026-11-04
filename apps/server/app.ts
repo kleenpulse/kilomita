@@ -67,6 +67,7 @@ export function buildServer(config: ServerConfig, options: ServerOptions = {}): 
     startedAt.set(request, performance.now());
     reply.headers({
       "cache-control": "no-store, no-transform",
+      "x-content-type-options": "nosniff",
       ...corsHeaders(request.headers.origin, config.origins),
     });
     done();

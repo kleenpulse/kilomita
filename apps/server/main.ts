@@ -2,6 +2,7 @@ import { join } from "node:path";
 import { buildServer } from "./app.ts";
 import { Budget, loadBudgetState, saveBudgetState } from "./budget.ts";
 import { ConfigError, parseConfig } from "./config.ts";
+import { log } from "./log.ts";
 
 const SAVE_EVERY_MS = 60_000;
 
@@ -9,7 +10,7 @@ let config;
 try {
   config = parseConfig(process.env);
 } catch (error) {
-  console.error(error instanceof ConfigError ? error.message : "Invalid configuration.");
+  log("error", "config", error instanceof ConfigError ? error.message : "Invalid configuration.");
   process.exit(1);
 }
 
@@ -20,7 +21,11 @@ const budget = new Budget(
   statePath === null ? null : loadBudgetState(statePath),
 );
 if (config.budgetBytes !== null && statePath === null) {
-  console.error("KILOMITA_STATE_DIR is unset: the budget count is lost on restart.");
+  log(
+    "warn",
+    "state-dir-unset",
+    "KILOMITA_STATE_DIR is unset: the budget count is lost on restart.",
+  );
 }
 
 function save(): void {
@@ -41,4 +46,4 @@ process.once("SIGTERM", () => void shutdown());
 process.once("SIGINT", () => void shutdown());
 
 await app.listen({ port: config.port, host: config.host });
-console.log(`Test server listening on ${config.host}:${config.port} (${config.protocol}).`);
+log("info", "listening", `${config.host}:${String(config.port)} (${config.protocol})`);

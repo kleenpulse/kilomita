@@ -1,4 +1,5 @@
 import { readFileSync, renameSync, writeFileSync } from "node:fs";
+import { log } from "./log.ts";
 
 /*
  * The monthly transfer budget. Lagos VPS plans throttle the port once the month's allowance is
@@ -137,7 +138,11 @@ export function loadBudgetState(path: string): BudgetState | null {
   } catch {
     // Falls through to the message below.
   }
-  console.error("Budget state file is unreadable; starting the count from zero.");
+  log(
+    "warn",
+    "budget-state-unreadable",
+    "Budget state file is unreadable; starting the count from zero.",
+  );
   return null;
 }
 

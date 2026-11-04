@@ -26,6 +26,10 @@ export function SiteFooter() {
         ·{" "}
         <a href="/privacy" className={LINK}>
           Privacy
+        </a>{" "}
+        ·{" "}
+        <a href="/status" className={LINK}>
+          Status
         </a>
       </p>
     </footer>

@@ -51,6 +51,8 @@ describe("loadInsights", () => {
       } as unknown as Stores["db"],
     });
     expect(await loadInsights("isp", {})).toEqual({ status: "unavailable" });
-    expect(log.mock.calls).toEqual([["Loading insights failed (ECONNREFUSED)"]]);
+    expect(log.mock.calls.map(([line]) => JSON.parse(String(line)) as unknown)).toEqual([
+      expect.objectContaining({ level: "error", event: "insights-load", code: "ECONNREFUSED" }),
+    ]);
   });
 });

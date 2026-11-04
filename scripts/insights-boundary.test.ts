@@ -38,7 +38,22 @@ describe("web's server-only boundary", { timeout: 120_000 }, () => {
     },
   );
 
+  const cardRoute = "app/r/[code]/card.png/route.tsx";
+
+  it("allows the share-card image route its render limit", async () => {
+    expect(await restricted(cardRoute, "@/server/card-limit")).toBe(false);
+  });
+
+  it.each(["@/server/stores", "@/server/card-limitx", "@/server/insights", "../../../server/kv"])(
+    "bans %s in the share-card image route",
+    async (specifier) => {
+      expect(await restricted(cardRoute, specifier)).toBe(true);
+    },
+  );
+
   it.each([
+    ["app/r/[code]/page.tsx", "@/server/card-limit"],
+    ["app/r/[code]/page.tsx", "@/server/stores"],
     ["app/(insights)/_components/cells.tsx", "@/server/insights"],
     ["app/(insights)/_components/cells.tsx", "../../../server/stats"],
     ["app/page.tsx", "@/server/insights"],

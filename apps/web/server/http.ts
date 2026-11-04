@@ -42,23 +42,53 @@ export async function readJson(request: Request, memory: boolean): Promise<BodyR
 }
 
 /**
- * Logs a failure by its code only: driver errors carry hosts and ports. Drizzle wraps driver errors
- * in its own query error, so the SQLSTATE or errno may sit on the cause.
+ * One JSON object per line, so the host's log view can filter it. Every value is a fixed string
+ * from this codebase or an error code: never a message, an address, a body or a secret.
  */
-export function logFailure(what: string, error: unknown): void {
+export function log(
+  level: "error" | "warn" | "info",
+  event: string,
+  fields: { code?: string; note?: string; count?: number } = {},
+): void {
+  const line = JSON.stringify({ t: new Date().toISOString(), level, event, ...fields });
+  if (level === "error") console.error(line);
+  else if (level === "warn") console.warn(line);
+  else console.info(line);
+}
+
+/**
+ * An error's code, never its message: driver errors carry hosts and ports. Drizzle wraps driver
+ * errors in its own query error, so the SQLSTATE or errno may sit on the cause.
+ */
+export function errorCode(error: unknown): string {
   const codeOf = (value: unknown) => (value as { code?: unknown } | null)?.code;
   const code = [codeOf(error), codeOf((error as { cause?: unknown } | null)?.cause)].find(
     (candidate): candidate is string => typeof candidate === "string",
   );
-  console.error(`${what} failed (${code ?? "no code"})`);
+  return code ?? "none";
 }
 
-/** Turns an unexpected failure into a plain 500. */
-export async function guarded(task: () => Promise<Response>): Promise<Response> {
+/** Logs a failure by its code only. `event` is a fixed slug, such as "tokens". */
+export function logFailure(event: string, error: unknown): string {
+  const code = errorCode(error);
+  log("error", event, { code });
+  return code;
+}
+
+/**
+ * Turns an unexpected failure into a plain 500, logged by code. `onFailure` also counts it (the
+ * metrics write, which must never throw back into the request).
+ */
+export async function guarded(
+  event: string,
+  task: () => Promise<Response>,
+  onFailure?: (event: string, code: string) => void,
+): Promise<Response> {
   try {
     return await task();
   } catch (error) {
-    logFailure("Sharing request", error);
+    const code = logFailure(event, error);
+    onFailure?.(event, code);
     return json(500, { error: "failed" });
   }
 }

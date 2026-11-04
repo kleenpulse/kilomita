@@ -10,6 +10,10 @@ export interface Kv {
   get(key: string): Promise<string | null>;
   /** Adds one to a counter that disappears at windowEndMs, and returns the new count. */
   countInWindow(key: string, windowEndMs: number): Promise<number>;
+  /** Adds one to each field of a hash that disappears at expiresAtMs. */
+  incrementFields(key: string, fields: readonly string[], expiresAtMs: number): Promise<void>;
+  /** Every field of a hash and its count; empty when the hash is absent. */
+  readFields(key: string): Promise<Record<string, number>>;
 }
 
 export function memoryKv(now: () => number = Date.now): Kv {
@@ -21,6 +25,15 @@ export function memoryKv(now: () => number = Date.now): Kv {
       return undefined;
     }
     return entry;
+  };
+  const hashes = new Map<string, { fields: Map<string, number>; expiresAtMs: number }>();
+  const liveHash = (key: string) => {
+    const hash = hashes.get(key);
+    if (hash && hash.expiresAtMs <= now()) {
+      hashes.delete(key);
+      return undefined;
+    }
+    return hash;
   };
   return {
     setIfAbsent(key, value, expiresAtMs) {
@@ -36,10 +49,19 @@ export function memoryKv(now: () => number = Date.now): Kv {
       entries.set(key, { value: String(count), expiresAtMs: windowEndMs });
       return Promise.resolve(count);
     },
+    incrementFields(key, names, expiresAtMs) {
+      const fields = liveHash(key)?.fields ?? new Map<string, number>();
+      for (const name of names) fields.set(name, (fields.get(name) ?? 0) + 1);
+      hashes.set(key, { fields, expiresAtMs });
+      return Promise.resolve();
+    },
+    readFields(key) {
+      return Promise.resolve(Object.fromEntries(liveHash(key)?.fields ?? []));
+    },
   };
 }
 
-export type UpstashClient = Pick<Redis, "set" | "get" | "pipeline">;
+export type UpstashClient = Pick<Redis, "set" | "get" | "pipeline" | "hgetall">;
 
 /** The client must be created with automaticDeserialization: false, so values stay strings. */
 export function upstashKv(redis: UpstashClient): Kv {
@@ -58,6 +80,19 @@ export function upstashKv(redis: UpstashClient): Kv {
         .pexpireat(key, windowEndMs)
         .exec<[number, number]>();
       return count;
+    },
+    async incrementFields(key, names, expiresAtMs) {
+      if (names.length === 0) return;
+      const pipeline = redis.pipeline();
+      for (const name of names) pipeline.hincrby(key, name, 1);
+      await pipeline.pexpireat(key, expiresAtMs).exec();
+    },
+    async readFields(key) {
+      // With automaticDeserialization off the counts come back as strings.
+      const raw = await redis.hgetall<Record<string, string | number>>(key);
+      return Object.fromEntries(
+        Object.entries(raw ?? {}).map(([name, value]) => [name, Number(value)]),
+      );
     },
   };
 }

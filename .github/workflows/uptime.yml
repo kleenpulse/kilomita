@@ -1,0 +1,48 @@
+name: Uptime
+
+# Checks the deployed web app and each test server every 15 minutes. A failed run emails the
+# repository's owner. It touches only our own hosts (never Cloudflare), and it is skipped wherever
+# the repository variables are unset, so forks never ping anything.
+#
+# GitHub may delay or drop scheduled runs, and disables schedules in a public repository after
+# 60 days without activity (docs/runbook.md).
+
+on:
+  schedule:
+    - cron: "*/15 * * * *"
+  workflow_dispatch:
+
+permissions: {}
+
+concurrency:
+  group: uptime
+  cancel-in-progress: false
+
+jobs:
+  check:
+    name: Web app and test servers answer ok
+    if: github.repository == 'kleenpulse/kilomita' && vars.KILOMITA_WEB_URL != ''
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Check /api/health and each server's /health
+        env:
+          WEB_URL: ${{ vars.KILOMITA_WEB_URL }}
+          SERVER_URLS: ${{ vars.KILOMITA_SERVER_URLS }}
+        run: |
+          set -u
+          failed=0
+          check() {
+            body=$(curl -sS --max-time 20 --retry 2 --retry-delay 10 "$1") || {
+              echo "::error::$1 did not answer"
+              failed=1
+              return
+            }
+            case "$body" in
+              *'"status":"ok"'*) echo "ok: $1" ;;
+              *) echo "::error::$1 answered $body"; failed=1 ;;
+            esac
+          }
+          check "${WEB_URL%/}/api/health"
+          for server in $SERVER_URLS; do check "${server%/}/health"; done
+          exit "$failed"

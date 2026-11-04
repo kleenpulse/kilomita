@@ -30,6 +30,7 @@
     "test:e2e": "turbo run test:e2e",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
+    "audit": "bun audit --audit-level=high",
     "licenses": "bun scripts/check-licenses.ts",
     "tripwire": "bun scripts/tripwire.ts",
     "load-test": "bun scripts/load-test.ts",

@@ -4,6 +4,7 @@ const MESSAGE = "Server-only code: import it from server/ or app/api/ only.";
 // Regexes, so a relative path is caught at any depth. Not "server" anywhere: next/server is fine.
 const SERVER_ALIAS = "^@/server(/|$)";
 const SERVER_ALIAS_EXCEPT_INSIGHTS = "^@/server(/(?!insights$).*)?$";
+const SERVER_ALIAS_EXCEPT_CARD_LIMIT = "^@/server(/(?!card-limit$).*)?$";
 const serverBan = (alias: string) =>
   [alias, "^\\./server(/|$)", "^(\\.\\./)+server(/|$)"].map((regex) => ({
     regex,
@@ -59,6 +60,14 @@ const config = [
     files: ["app/\\(insights\\)/**/page.tsx"],
     rules: {
       "no-restricted-imports": ["error", { patterns: serverBan(SERVER_ALIAS_EXCEPT_INSIGHTS) }],
+    },
+  },
+  {
+    // The share-card image route may reach its render limit and nothing else under server/. The
+    // share page next to it stays fully banned: it stores and looks up nothing.
+    files: ["app/r/\\[code\\]/card.png/route.tsx"],
+    rules: {
+      "no-restricted-imports": ["error", { patterns: serverBan(SERVER_ALIAS_EXCEPT_CARD_LIMIT) }],
     },
   },
 ];

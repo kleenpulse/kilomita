@@ -3,6 +3,7 @@ import { COUNT_BANDS } from "@kilomita/shared/lists";
 import type { Metadata } from "next";
 import { bandLabel } from "@/lib/insights-format";
 import { PageHeader } from "../_components/page-header";
+import { DATA_LICENSE } from "../_components/json-ld";
 import { insightsMetadata } from "../_components/page-meta";
 
 export const metadata: Metadata = insightsMetadata({
@@ -135,6 +136,18 @@ export default function MethodologyPage() {
             themselves.
           </li>
         </ul>
+      </section>
+
+      <section>
+        <h2 className={H2}>Using the numbers</h2>
+        <p className="mt-1">
+          The published numbers on these pages and from <code>/api/stats</code> are licensed under{" "}
+          <a className="underline underline-offset-2" href={DATA_LICENSE.url}>
+            {DATA_LICENSE.name}
+          </a>
+          . You may reuse them, for reporting or research, as long as you credit {APP_NAME} and link
+          to this page, so readers can see how they were made and what they can&apos;t tell.
+        </p>
       </section>
     </main>
   );
